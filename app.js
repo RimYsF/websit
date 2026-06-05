@@ -190,8 +190,10 @@ async function initializeApp() {
   await loadAppData();
 
   supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    const previousUserId = currentSession?.user?.id || "";
+    const nextUserId = session?.user?.id || "";
     currentSession = session;
-    await loadAppData();
+    await loadAppData({ showLoading: previousUserId !== nextUserId });
   });
 }
 
@@ -1416,6 +1418,9 @@ async function signInWithGoogle() {
     provider: "google",
     options: {
       redirectTo: `${window.location.origin}${window.location.pathname}`,
+      queryParams: {
+        prompt: "select_account",
+      },
     },
   });
 
