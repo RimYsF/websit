@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Builder Story</title>
+    <link rel="preconnect" href="https://images.unsplash.com" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail" aria-label="Primary navigation">
+        <button
+          class="mobile-menu-pill"
+          type="button"
+          data-mobile-menu
+          aria-label="Open navigation"
+          aria-expanded="false"
+        >
+          <span></span>
+        </button>
+        <div class="mobile-panel-head" aria-hidden="true">
+          <div class="mobile-panel-mark">BS</div>
+          <div class="mobile-panel-copy">
+            <span>Builder Story</span>
+            <strong>Developer feed</strong>
+            <small>Build notes, repos and feedback</small>
+          </div>
+          <div class="mobile-panel-orbit"></div>
+        </div>
+        <div class="rail-panel-head">
+          <div class="rail-panel-mark">BS</div>
+          <div class="rail-panel-copy">
+            <span>Builder Story</span>
+            <strong>Build feed</strong>
+          </div>
+        </div>
+        <nav class="builder-dock" aria-label="Main navigation">
+          <button
+            class="dock-tab is-active"
+            type="button"
+            data-view="feed"
+            aria-label="Лента"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 11.5 12 4l9 7.5" />
+              <path d="M5 10.5V20h14v-9.5" />
+              <path d="M9 20v-6h6v6" />
+            </svg>
+            <span>Лента</span>
+          </button>
+          <button
+            class="dock-tab"
+            type="button"
+            data-view="profile"
+            aria-label="Профиль"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 21a8 8 0 0 0-16 0" />
+              <path d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z" />
+            </svg>
+            <span>Профиль</span>
+          </button>
+          <button
+            class="dock-tab"
+            type="button"
+            aria-label="Настройки"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" />
+              <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04-2.05 2.05-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.09 1.65V20.4h-2.9v-.08a1.8 1.8 0 0 0-1.09-1.65 1.8 1.8 0 0 0-1.98.36l-.04.04-2.05-2.05.04-.04A1.8 1.8 0 0 0 4.98 15a1.8 1.8 0 0 0-1.65-1.09H3.25v-2.9h.08a1.8 1.8 0 0 0 1.65-1.09 1.8 1.8 0 0 0-.36-1.98l-.04-.04 2.05-2.05.04.04a1.8 1.8 0 0 0 1.98.36 1.8 1.8 0 0 0 1.09-1.65V3.6h2.9v.08a1.8 1.8 0 0 0 1.09 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04 2.05 2.05-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.09h.08v2.9h-.08A1.8 1.8 0 0 0 19.4 15z" />
+            </svg>
+            <span>Настройки</span>
+          </button>
+        </nav>
+        <div class="rail-feed-filter">
+          <div class="segmented" role="tablist" aria-label="Feed filter">
+            <button class="segment is-active" type="button" data-feed-filter="latest">
+              Latest
+            </button>
+            <button class="segment" type="button" data-feed-filter="following">
+              Following
+            </button>
+          </div>
+        </div>
+        <section class="auth-card" aria-label="Account">
+          <div class="auth-signed-out" data-auth-signed-out>
+            <button class="google-auth-button" type="button" data-google-signin>
+              <span aria-hidden="true">G</span>
+              <strong>Continue with Google</strong>
+            </button>
+            <p class="auth-status" data-auth-status></p>
+          </div>
+          <div class="auth-signed-in" data-auth-signed-in hidden>
+            <div class="auth-user">
+              <span class="auth-avatar" data-auth-avatar>A</span>
+              <span>
+                <strong data-auth-name>Builder</strong>
+                <small data-auth-handle>@builder</small>
+              </span>
+            </div>
+            <button class="auth-submit auth-signout" type="button" data-auth-signout>Sign out</button>
+          </div>
+        </section>
+      </aside>
+
+      <main class="timeline">
+        <section class="view is-active" id="feed-view" aria-label="Feed">
+          <div class="post-list" id="post-list" aria-live="polite"></div>
+          <div class="feed-profile-view" id="feed-profile-view" hidden></div>
+        </section>
+
+        <section class="view" id="profile-view" aria-labelledby="profile-title">
+          <header class="profile-card">
+            <div class="profile-topline">
+              <div class="profile-avatar">A</div>
+            </div>
+            <h1 id="profile-title">Alex Morgan</h1>
+            <p>
+              Full-stack builder working on calm developer tools, launch notes
+              and small open-source experiments.
+            </p>
+            <div class="profile-stats">
+              <span><strong id="profile-post-count">0</strong> posts</span>
+              <span><strong>1.8k</strong> followers</span>
+              <span><strong>128</strong> following</span>
+            </div>
+          </header>
+
+          <form class="composer" id="composer">
+            <div class="composer-main">
+              <label class="sr-only" for="post-text">Post text</label>
+              <textarea
+                id="post-text"
+                maxlength="280"
+                placeholder="Share a build note, repo update or repost..."
+                required
+              ></textarea>
+
+              <input id="image-url" type="hidden" />
+              <input id="image-file" type="file" accept="image/*" hidden />
+
+              <div class="image-preview-strip" id="image-preview" hidden></div>
+              <div class="composer-preview" id="composer-preview" hidden></div>
+
+              <div class="composer-actions">
+                <div class="composer-tools">
+                  <button class="tool-button" type="button" data-attach-image title="Attach image">
+                    Image
+                  </button>
+                  <label class="link-field">
+                    <span>Link</span>
+                    <input
+                      id="external-url"
+                      type="text"
+                      placeholder="github.com/user/repo"
+                    />
+                  </label>
+                </div>
+                <button class="send-button" type="submit" aria-label="Publish post">
+                  ↑
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <div class="post-list" id="profile-post-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="post-template">
+      <article class="post-card">
+        <div class="post-avatar"></div>
+        <div class="post-main">
+          <header class="post-meta">
+            <div>
+              <strong class="post-author"></strong>
+              <span class="post-username"></span>
+              <span class="post-time"></span>
+            </div>
+            <div class="post-menu-wrap">
+              <button
+                class="icon-button post-more"
+                type="button"
+                aria-label="Post actions"
+                aria-expanded="false"
+              >
+                ···
+              </button>
+              <div class="post-menu" hidden>
+                <button class="post-menu-delete" type="button">Delete</button>
+              </div>
+            </div>
+          </header>
+          <p class="post-text"></p>
+          <img class="post-image" alt="" hidden />
+          <a class="link-preview" target="_blank" rel="noreferrer" hidden>
+            <img class="link-image" alt="" />
+            <span class="link-content">
+              <span class="link-site"></span>
+              <strong class="link-title"></strong>
+              <span class="link-desc"></span>
+              <span class="link-url"></span>
+            </span>
+          </a>
+          <div class="post-actions"></div>
+          <div class="comments"></div>
+        </div>
+      </article>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    <script src="app.js" defer></script>
+  </body>
+</html>
