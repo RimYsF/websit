@@ -237,9 +237,11 @@ async function ensureCurrentProfile() {
   activeProfileHandle = `@${created.username}`;
 }
 
-async function loadAppData() {
-  isLoading = true;
-  renderAll();
+async function loadAppData({ showLoading = true } = {}) {
+  if (showLoading) {
+    isLoading = true;
+    renderAll();
+  }
 
   await ensureCurrentProfile();
   await loadFollowing();
@@ -248,7 +250,9 @@ async function loadAppData() {
 
   updateAuthUi();
   isLoading = false;
+  const restoreScroll = showLoading ? null : { left: window.scrollX, top: window.scrollY };
   renderAll();
+  if (restoreScroll) window.scrollTo(restoreScroll.left, restoreScroll.top);
 }
 
 async function loadFollowing() {
@@ -1032,7 +1036,7 @@ async function createPost() {
   clearImagePreview();
   composerPreview.hidden = true;
   composerPreview.innerHTML = "";
-  await loadAppData();
+  await loadAppData({ showLoading: false });
 }
 
 async function deletePost(postId) {
@@ -1049,7 +1053,7 @@ async function deletePost(postId) {
     setStatus(error.message);
     return;
   }
-  await loadAppData();
+  await loadAppData({ showLoading: false });
 }
 
 async function reportPost(postId) {
@@ -1097,7 +1101,7 @@ async function toggleReaction(postId, type) {
   }
 
   animatedReactionPostId = postId;
-  await loadAppData();
+  await loadAppData({ showLoading: false });
   animatedReactionPostId = null;
 }
 
@@ -1119,7 +1123,7 @@ async function addComment(postId, text, parentCommentId = null) {
 
   activeReplyTarget = null;
   openCommentPostIds.add(postId);
-  await loadAppData();
+  await loadAppData({ showLoading: false });
 }
 
 async function toggleCommentLike(commentId, shouldOpenComments = true) {
@@ -1149,7 +1153,7 @@ async function toggleCommentLike(commentId, shouldOpenComments = true) {
     const post = posts.find((item) => findCommentById(item.comments, commentId));
     if (post) openCommentPostIds.add(post.id);
   }
-  await loadAppData();
+  await loadAppData({ showLoading: false });
 }
 
 function findCommentById(comments, commentId) {
@@ -1182,7 +1186,7 @@ async function toggleFollow(profileId) {
     return;
   }
 
-  await loadAppData();
+  await loadAppData({ showLoading: false });
 }
 
 function requireProfile() {
