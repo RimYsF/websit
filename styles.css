@@ -268,53 +268,61 @@ a {
 
 .auth-card {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   margin-top: auto;
   padding-top: 18px;
 }
 
-.auth-signed-out {
-  display: flex;
-  align-items: center;
-}
-
-.auth-signed-in {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-}
-
-.rail-auth-button {
+.auth-submit,
+.google-auth-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: auto;
-  min-width: 78px;
-  min-height: 32px;
-  padding: 0 16px;
+  min-height: 34px;
+  padding: 0 12px;
   border: 0;
   border-radius: 999px;
-  color: #ffffff;
-  background: rgba(17, 24, 39, 0.22);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 12px 26px -24px rgba(8, 47, 73, 0.8);
-  font-size: 13px;
+  color: var(--dark);
+  background: #ffffff;
+  font-size: 12px;
   font-weight: 820;
-  line-height: 1;
-  transition: 160ms var(--ease);
-  transition-property: background, transform;
 }
 
-.rail-auth-button:hover {
-  background: rgba(17, 24, 39, 0.3);
+.google-auth-button {
+  width: 100%;
+  gap: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #151922;
+  box-shadow: 0 14px 32px -26px rgba(13, 8, 38, 0.7);
+}
+
+.google-auth-button span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #1a73e8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.google-auth-button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.google-auth-button:hover,
+.auth-submit:hover {
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .auth-status {
   min-height: 16px;
-  margin: 7px 2px 0 12px;
+  margin: 7px 2px 0;
   color: rgba(255, 255, 255, 0.76);
   font-size: 11px;
   line-height: 1.35;
@@ -325,7 +333,6 @@ a {
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
-  min-width: 0;
   color: #ffffff;
 }
 
@@ -361,207 +368,8 @@ a {
 }
 
 .auth-signout {
-  justify-self: end;
-  padding-inline: 14px;
-}
-
-.signup-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: 28px;
-}
-
-.signup-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(12, 13, 16, 0.68);
-  backdrop-filter: blur(10px);
-}
-
-.signup-panel {
-  position: relative;
-  z-index: 1;
-  width: clamp(360px, 28vw, 460px);
-  max-height: min(92vh, 820px);
-  overflow: hidden auto;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 20px;
-  background: #2f3032;
-  color: #ffffff;
-  box-shadow: 0 32px 90px -48px rgba(0, 0, 0, 0.78);
-}
-
-.signup-art {
-  display: block;
   width: 100%;
-  height: clamp(220px, 31vh, 330px);
-  object-fit: cover;
-  object-position: top center;
-  background: #1f2023;
-}
-
-.signup-content {
-  display: grid;
-  gap: 16px;
-  padding: 28px 28px 30px;
-}
-
-.signup-content h2 {
-  margin: 0;
-  color: #ffffff;
-  font-size: clamp(24px, 2.2vw, 31px);
-  line-height: 1.12;
-  text-align: center;
-  font-weight: 900;
-  letter-spacing: 0;
-}
-
-.signup-content p {
-  margin: -4px 0 2px;
-  color: rgba(255, 255, 255, 0.62);
-  text-align: center;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.signup-avatar-picker {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  min-height: 70px;
-  padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
-  cursor: pointer;
-}
-
-.signup-avatar-preview {
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border-radius: 50%;
-  color: #ffffff;
-  background: linear-gradient(135deg, rgba(0, 112, 243, 0.76), rgba(0, 184, 217, 0.64));
-  font-weight: 900;
-}
-
-.signup-avatar-copy {
-  display: grid;
-  min-width: 0;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.signup-upload-button {
-  min-height: 38px;
-  padding: 0 15px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 11px;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 13px;
-  font-weight: 850;
-  line-height: 38px;
-}
-
-.signup-name-field {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-height: 50px;
-  padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.035);
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.signup-name-field input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  color: #ffffff;
-  background: transparent;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.signup-name-field input::placeholder {
-  color: rgba(255, 255, 255, 0.48);
-}
-
-.signup-handle-preview {
-  min-height: 18px;
-  margin-top: -8px;
-  color: rgba(255, 255, 255, 0.52);
-  font-size: 12px;
-  font-weight: 760;
-}
-
-.signup-error {
-  min-height: 18px;
-  margin: -10px 0 0 !important;
-  color: #fca5a5 !important;
-  text-align: left !important;
-  font-size: 12px !important;
-}
-
-.signup-google-button {
-  display: inline-flex;
-  width: 100%;
-  min-height: 50px;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border: 0;
-  border-radius: 10px;
-  color: #263243;
-  background: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  font-weight: 850;
-}
-
-.signup-google-button span {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 50%;
-  color: #ffffff;
-  background: rgba(70, 130, 180, 0.82);
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.signup-google-button:hover {
-  background: #ffffff;
-}
-
-.avatar-render,
-.post-avatar,
-.profile-avatar,
-.comment-avatar,
-.profile-popover-avatar {
-  overflow: hidden;
-}
-
-.avatar-render img,
-.post-avatar img,
-.profile-avatar img,
-.comment-avatar img,
-.profile-popover-avatar img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
+  margin-top: 10px;
 }
 
 .dock-tab {
@@ -2194,7 +2002,8 @@ a {
     visibility: visible;
   }
 
-  .rail-auth-button {
+  .auth-submit,
+  .google-auth-button {
     grid-column: 1 / -1;
   }
 
@@ -2397,40 +2206,6 @@ a {
   .composer {
     padding-right: 14px;
     padding-left: 14px;
-  }
-
-  .signup-modal {
-    padding: 18px;
-  }
-
-  .signup-panel {
-    width: min(80vw, 460px);
-    min-width: min(300px, calc(100vw - 28px));
-    max-height: 88vh;
-    border-radius: 18px;
-  }
-
-  .signup-art {
-    height: clamp(190px, 30vh, 260px);
-  }
-
-  .signup-content {
-    gap: 13px;
-    padding: 22px 18px 24px;
-  }
-
-  .signup-content h2 {
-    font-size: 24px;
-  }
-
-  .signup-avatar-picker {
-    grid-template-columns: 44px minmax(0, 1fr) auto;
-    padding-inline: 12px;
-  }
-
-  .signup-avatar-preview {
-    width: 44px;
-    height: 44px;
   }
 
   .empty-state {

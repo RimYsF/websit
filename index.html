@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Builder Story</title>
     <link rel="preconnect" href="https://images.unsplash.com" />
-    <link rel="preload" as="image" href="bg.jpg" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -86,18 +85,21 @@
         </div>
         <section class="auth-card" aria-label="Account">
           <div class="auth-signed-out" data-auth-signed-out>
-            <button class="rail-auth-button auth-submit" type="button" data-open-signup>Sign in</button>
+            <button class="google-auth-button" type="button" data-google-signin>
+              <span aria-hidden="true">G</span>
+              <strong>Continue with Google</strong>
+            </button>
             <p class="auth-status" data-auth-status></p>
           </div>
           <div class="auth-signed-in" data-auth-signed-in hidden>
             <div class="auth-user">
-              <span class="auth-avatar avatar-render" data-auth-avatar>A</span>
+              <span class="auth-avatar" data-auth-avatar>A</span>
               <span>
                 <strong data-auth-name>Builder</strong>
                 <small data-auth-handle>@builder</small>
               </span>
             </div>
-            <button class="rail-auth-button auth-submit auth-signout" type="button" data-auth-signout>Sign out</button>
+            <button class="auth-submit auth-signout" type="button" data-auth-signout>Sign out</button>
           </div>
         </section>
       </aside>
@@ -165,49 +167,6 @@
           <div class="post-list" id="profile-post-list"></div>
         </section>
       </main>
-    </div>
-
-    <div class="signup-modal" data-signup-modal hidden>
-      <div class="signup-backdrop" data-signup-close></div>
-      <section
-        class="signup-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="signup-title"
-      >
-        <img class="signup-art" src="bg.jpg" alt="" />
-        <div class="signup-content">
-          <h2 id="signup-title">Welcome, you're starting your builder story!</h2>
-          <p>Add your avatar and pick a name for a quick start.</p>
-
-          <label class="signup-avatar-picker">
-            <span class="signup-avatar-preview avatar-render" data-signup-avatar-preview>B</span>
-            <span class="signup-avatar-copy">
-              <strong>Your avatar</strong>
-            </span>
-            <span class="signup-upload-button">Upload</span>
-            <input data-signup-avatar-input type="file" accept="image/*" hidden />
-          </label>
-
-          <label class="signup-name-field">
-            <span aria-hidden="true">@</span>
-            <input
-              data-signup-name
-              type="text"
-              maxlength="80"
-              placeholder="Your name"
-              autocomplete="nickname"
-            />
-          </label>
-          <div class="signup-handle-preview" data-signup-handle>@builder</div>
-          <p class="signup-error" data-signup-error></p>
-
-          <button class="signup-google-button" type="button" data-google-signin>
-            <span aria-hidden="true">G</span>
-            <strong>Continue with Google</strong>
-          </button>
-        </div>
-      </section>
     </div>
 
     <template id="post-template">
