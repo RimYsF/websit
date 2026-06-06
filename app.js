@@ -1,5 +1,7 @@
 const SUPABASE_URL = "https://xrwzgtzdtkvgjrkzeztn.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_UYKQPoCWBdRCWLfwJBCdsw_jMF1mMpt";
+const ONBOARDING_STORAGE_KEY = "builder-story-pending-onboarding-v1";
+const AVATAR_STORAGE_PREFIX = "builder-story-avatar:";
 const reactionTypes = ["Fire"];
 
 const supabaseClient = window.supabase?.createClient(
@@ -43,6 +45,7 @@ const imagePreview = document.querySelector("#image-preview");
 const composerPreview = document.querySelector("#composer-preview");
 const rail = document.querySelector(".rail");
 const mobileMenuButton = document.querySelector("[data-mobile-menu]");
+const openSignupButtons = document.querySelectorAll("[data-open-signup]");
 const googleSigninButton = document.querySelector("[data-google-signin]");
 const authStatus = document.querySelector("[data-auth-status]");
 const authSignedOut = document.querySelector("[data-auth-signed-out]");
@@ -51,7 +54,16 @@ const authName = document.querySelector("[data-auth-name]");
 const authHandle = document.querySelector("[data-auth-handle]");
 const authAvatar = document.querySelector("[data-auth-avatar]");
 const authSignout = document.querySelector("[data-auth-signout]");
+const signupModal = document.querySelector("[data-signup-modal]");
+const signupNameInput = document.querySelector("[data-signup-name]");
+const signupHandlePreview = document.querySelector("[data-signup-handle]");
+const signupError = document.querySelector("[data-signup-error]");
+const signupAvatarInput = document.querySelector("[data-signup-avatar-input]");
+const signupAvatarPreview = document.querySelector("[data-signup-avatar-preview]");
+const signupCloseTargets = document.querySelectorAll("[data-signup-close]");
 const MOBILE_MENU_HIDE_DISTANCE = 220;
+
+let signupAvatarDataUrl = "";
 
 function setStatus(message) {
   if (authStatus) authStatus.textContent = message || "";
@@ -67,6 +79,61 @@ function normalizeUsername(value) {
     .slice(0, 32);
 }
 
+function normalizeDisplayName(value) {
+  return String(value || "").trim().replace(/^@+/, "").trim().slice(0, 80);
+}
+
+function getAvatarFallback(value) {
+  return String(value || "Builder").trim().slice(0, 1).toUpperCase() || "B";
+}
+
+function readJsonStorage(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function writeJsonStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    setStatus("Local storage is full. Try a smaller avatar.");
+  }
+}
+
+function getLocalAvatar(userId) {
+  if (!userId) return "";
+  try {
+    return localStorage.getItem(`${AVATAR_STORAGE_PREFIX}${userId}`) || "";
+  } catch {
+    return "";
+  }
+}
+
+function setLocalAvatar(userId, dataUrl) {
+  if (!userId || !dataUrl) return;
+  try {
+    localStorage.setItem(`${AVATAR_STORAGE_PREFIX}${userId}`, dataUrl);
+  } catch {
+    setStatus("Avatar was too large to save locally.");
+  }
+}
+
+function renderAvatarContent(userLike) {
+  const image = userLike?.avatarImage || getLocalAvatar(userLike?.id);
+  if (image) {
+    return `<img src="${escapeHtml(image)}" alt="" loading="lazy" decoding="async" />`;
+  }
+  return escapeHtml(userLike?.avatar || getAvatarFallback(userLike?.name || userLike?.author));
+}
+
+function renderAvatarInto(element, userLike) {
+  if (!element) return;
+  element.innerHTML = renderAvatarContent(userLike);
+}
+
 function profileToUser(profile) {
   if (!profile) return null;
   const name = profile.display_name || profile.username || "Builder";
@@ -75,7 +142,8 @@ function profileToUser(profile) {
     name,
     username: profile.username,
     handle: `@${profile.username}`,
-    avatar: name.slice(0, 1).toUpperCase(),
+    avatar: getAvatarFallback(name),
+    avatarImage: getLocalAvatar(profile.id),
     bio: profile.bio || profile.headline || "",
     postCount: profile.posts_count || 0,
     followersCount: profile.followers_count || 0,
@@ -239,6 +307,36 @@ async function ensureCurrentProfile() {
   activeProfileHandle = `@${created.username}`;
 }
 
+async function applyPendingOnboarding() {
+  if (!currentProfile) return;
+
+  const pending = readJsonStorage(ONBOARDING_STORAGE_KEY);
+  if (!pending?.displayName || !pending?.username) return;
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .update({
+      display_name: pending.displayName,
+      username: pending.username,
+    })
+    .eq("id", currentProfile.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    setStatus(error.message);
+    return;
+  }
+
+  if (pending.avatarDataUrl) {
+    setLocalAvatar(currentProfile.id, pending.avatarDataUrl);
+  }
+
+  currentProfile = data;
+  activeProfileHandle = `@${data.username}`;
+  localStorage.removeItem(ONBOARDING_STORAGE_KEY);
+}
+
 async function loadAppData({ showLoading = true } = {}) {
   if (showLoading) {
     isLoading = true;
@@ -246,6 +344,7 @@ async function loadAppData({ showLoading = true } = {}) {
   }
 
   await ensureCurrentProfile();
+  await applyPendingOnboarding();
   await loadFollowing();
   await loadProfiles();
   await loadPosts();
@@ -412,7 +511,8 @@ function mapPostRow(row, comments, reactions) {
       id: row.author_id,
       name: authorName,
       username: row.author?.username || "builder",
-      avatar: authorName.slice(0, 1).toUpperCase(),
+      avatar: getAvatarFallback(authorName),
+      avatarImage: getLocalAvatar(row.author_id),
     },
     text: row.body,
     image: image?.cdn_url || image?.public_url || "",
@@ -432,7 +532,8 @@ function mapCommentRow(row, isLiked) {
     author: name,
     authorId: row.author?.id,
     handle: `@${row.author?.username || "builder"}`,
-    avatar: name.slice(0, 1).toUpperCase(),
+    avatar: getAvatarFallback(name),
+    avatarImage: getLocalAvatar(row.author?.id),
     text: row.body,
     likes: row.likes_count || 0,
     isLiked,
@@ -449,11 +550,12 @@ function updateAuthUi() {
   composer.hidden = !signedIn || activeProfileHandle !== `@${currentProfile?.username}`;
 
   if (!signedIn) return;
+  closeSignupModal();
 
   const user = profileToUser(currentProfile);
   authName.textContent = user.name;
   authHandle.textContent = user.handle;
-  authAvatar.textContent = user.avatar;
+  renderAvatarInto(authAvatar, user);
 }
 
 function renderAll() {
@@ -500,7 +602,7 @@ function renderFeedProfile() {
         <span>Back</span>
       </button>
       <div class="profile-topline">
-        <div class="profile-avatar">${escapeHtml(user.avatar)}</div>
+        <div class="profile-avatar">${renderAvatarContent(user)}</div>
         ${renderFollowButton(user, isOwnProfile)}
       </div>
       <h1>${escapeHtml(user.name)}</h1>
@@ -532,7 +634,7 @@ function renderProfile() {
     : [];
 
   if (!user) {
-    profileAvatar.textContent = "B";
+    renderAvatarInto(profileAvatar, { avatar: "B" });
     profileTitle.textContent = "Sign in";
     profileBio.textContent = "Create an account to publish build notes and keep a profile.";
     profileStats.innerHTML = `<span><strong>0</strong> posts</span>`;
@@ -541,7 +643,7 @@ function renderProfile() {
     return;
   }
 
-  profileAvatar.textContent = user.avatar;
+  renderAvatarInto(profileAvatar, user);
   profileTitle.textContent = user.name;
   profileBio.textContent = getProfileSummary(user);
   profileCard.classList.toggle("is-readonly", !isOwnProfile);
@@ -743,6 +845,7 @@ function getKnownUserByHandle(handle) {
         username: post.author.username,
         handle: `@${post.author.username}`,
         avatar: post.author.avatar,
+        avatarImage: post.author.avatarImage || getLocalAvatar(post.author.id),
         postCount: posts.filter((item) => item.author.id === post.author.id).length,
         followersCount: 0,
         followingCount: 0,
@@ -763,14 +866,17 @@ function renderUserMention(handle) {
 
 function renderProfileTrigger(userLike, className, label) {
   const user = getKnownUserByHandle(userLike.handle) || {
+    id: userLike.id || userLike.authorId,
     handle: userLike.handle || makeCommentHandle(userLike.author || userLike.name),
     name: userLike.author || userLike.name || "Builder",
     avatar: userLike.avatar || "?",
+    avatarImage: userLike.avatarImage || getLocalAvatar(userLike.id || userLike.authorId),
   };
-  const text = label ?? user.avatar;
+  const isAvatar = className.includes("avatar");
+  const content = isAvatar ? renderAvatarContent(user) : escapeHtml(label ?? user.name);
   return `<button class="${className} profile-trigger" type="button" data-user-handle="${escapeHtml(
     user.handle
-  )}" aria-label="Open mini profile ${escapeHtml(user.name)}">${escapeHtml(text)}</button>`;
+  )}" aria-label="Open mini profile ${escapeHtml(user.name)}">${content}</button>`;
 }
 
 function renderRichText(value) {
@@ -1193,7 +1299,7 @@ async function toggleFollow(profileId) {
 
 function requireProfile() {
   if (currentProfile) return true;
-  setStatus("Sign in first.");
+  openSignupModal();
   return false;
 }
 
@@ -1221,7 +1327,7 @@ function openProfilePopover(handle, anchor) {
   popover.innerHTML = `
     <div class="profile-popover-art"></div>
     <div class="profile-popover-main">
-      <button class="profile-popover-avatar" type="button" data-open-profile="${escapeHtml(user.handle)}" aria-label="Open ${escapeHtml(user.name)} profile">${escapeHtml(user.avatar)}</button>
+      <button class="profile-popover-avatar" type="button" data-open-profile="${escapeHtml(user.handle)}" aria-label="Open ${escapeHtml(user.name)} profile">${renderAvatarContent(user)}</button>
       <div class="profile-popover-copy">
         <button class="profile-popover-name" type="button" data-open-profile="${escapeHtml(user.handle)}">${escapeHtml(user.name)}</button>
         <span>${escapeHtml(user.handle)}</span>
@@ -1407,11 +1513,139 @@ function clearImagePreview() {
   imagePreview.innerHTML = "";
 }
 
+function setSignupError(message) {
+  if (signupError) signupError.textContent = message || "";
+}
+
+function getSignupDisplayName() {
+  return normalizeDisplayName(signupNameInput?.value || "");
+}
+
+function getSignupUsername() {
+  return normalizeUsername(getSignupDisplayName());
+}
+
+function updateSignupPreview() {
+  const displayName = getSignupDisplayName();
+  const username = normalizeUsername(displayName || "builder");
+  if (signupHandlePreview) signupHandlePreview.textContent = `@${username || "builder"}`;
+  renderAvatarInto(signupAvatarPreview, {
+    name: displayName || "Builder",
+    avatar: getAvatarFallback(displayName || "Builder"),
+    avatarImage: signupAvatarDataUrl,
+  });
+}
+
+function openSignupModal(message = "") {
+  if (!signupModal) return;
+
+  const pending = readJsonStorage(ONBOARDING_STORAGE_KEY);
+  if (pending?.displayName && signupNameInput && !signupNameInput.value.trim()) {
+    signupNameInput.value = pending.displayName;
+  }
+  if (pending?.avatarDataUrl && !signupAvatarDataUrl) {
+    signupAvatarDataUrl = pending.avatarDataUrl;
+  }
+
+  setSignupError(message);
+  updateSignupPreview();
+  signupModal.hidden = false;
+  closeMobileMenu();
+  requestAnimationFrame(() => signupNameInput?.focus());
+}
+
+function closeSignupModal() {
+  if (signupModal) signupModal.hidden = true;
+}
+
+async function resizeAvatarFile(file) {
+  if (!file?.type?.startsWith("image/")) {
+    setSignupError("Choose an image file.");
+    return "";
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    const loaded = new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+    });
+    image.src = objectUrl;
+    await loaded;
+
+    const size = 256;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext("2d");
+    const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
+    const sourceX = Math.max(0, (image.naturalWidth - sourceSize) / 2);
+    const sourceY = Math.max(0, (image.naturalHeight - sourceSize) / 2);
+    context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+    return canvas.toDataURL("image/jpeg", 0.84);
+  } catch {
+    setSignupError("Avatar could not be loaded.");
+    return "";
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function prepareOnboarding() {
+  const displayName = getSignupDisplayName();
+  const username = getSignupUsername();
+
+  if (!displayName) {
+    setSignupError("Enter your name.");
+    return null;
+  }
+
+  if (username.length < 3) {
+    setSignupError("Use at least 3 letters or numbers.");
+    return null;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("id")
+    .eq("username", username)
+    .maybeSingle();
+
+  if (error) {
+    setSignupError(error.message);
+    return null;
+  }
+
+  if (data && data.id !== currentProfile?.id) {
+    setSignupError(`@${username} is already taken.`);
+    return null;
+  }
+
+  const pending = {
+    displayName,
+    username,
+    avatarDataUrl: signupAvatarDataUrl,
+  };
+  writeJsonStorage(ONBOARDING_STORAGE_KEY, pending);
+  return pending;
+}
+
 async function signInWithGoogle() {
   if (!supabaseClient) {
     setStatus("Supabase SDK did not load.");
     return;
   }
+
+  if (currentProfile) return;
+
+  if (signupModal?.hidden) {
+    openSignupModal();
+    return;
+  }
+
+  const pending = await prepareOnboarding();
+  if (!pending) return;
 
   setStatus("Opening Google...");
   const { error } = await supabaseClient.auth.signInWithOAuth({
@@ -1442,7 +1676,11 @@ document.querySelectorAll("[data-view]").forEach((button) => {
   });
 });
 
-googleSigninButton.addEventListener("click", signInWithGoogle);
+openSignupButtons.forEach((button) => {
+  button.addEventListener("click", () => openSignupModal());
+});
+
+googleSigninButton?.addEventListener("click", signInWithGoogle);
 authSignout.addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
 });
@@ -1480,7 +1718,31 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeProfilePopover();
+  if (event.key === "Escape") {
+    closeProfilePopover();
+    closeSignupModal();
+  }
+});
+
+signupCloseTargets.forEach((target) => {
+  target.addEventListener("click", closeSignupModal);
+});
+
+signupNameInput?.addEventListener("input", () => {
+  setSignupError("");
+  updateSignupPreview();
+});
+
+signupAvatarInput?.addEventListener("change", async () => {
+  const file = signupAvatarInput.files?.[0];
+  if (!file) return;
+
+  const resized = await resizeAvatarFile(file);
+  if (!resized) return;
+
+  signupAvatarDataUrl = resized;
+  setSignupError("");
+  updateSignupPreview();
 });
 
 document.querySelector("[data-attach-image]").addEventListener("click", () => {
