@@ -26,6 +26,7 @@ let activeProfileHandle = "";
 let feedProfileHandle = null;
 let isLoading = true;
 const openCommentPostIds = new Set();
+const pendingReactionPostIds = new Set();
 
 const postList = document.querySelector("#post-list");
 const feedProfileView = document.querySelector("#feed-profile-view");
@@ -283,8 +284,13 @@ async function initializeApp() {
 }
 
 async function ensureCurrentProfile() {
-  currentProfile = null;
-  if (!currentSession?.user) return;
+  if (!currentSession?.user) {
+    currentProfile = null;
+    return;
+  }
+  if (currentProfile && currentProfile.id !== currentSession.user.id) {
+    currentProfile = null;
+  }
 
   const { data, error } = await supabaseClient
     .from("profiles")
@@ -302,6 +308,8 @@ async function ensureCurrentProfile() {
     activeProfileHandle ||= `@${data.username}`;
     return;
   }
+
+  currentProfile = null;
 
   const emailName = currentSession.user.email?.split("@")[0] || "builder";
   const fallbackUsername = `${normalizeUsername(emailName).slice(0, 23) || "user"}_${currentSession.user.id.replaceAll("-", "").slice(0, 8)}`;
@@ -780,6 +788,7 @@ function renderPostActions(node, post) {
       .join(" ");
     button.setAttribute("aria-label", "React with fire");
     button.title = "Fire";
+    button.disabled = pendingReactionPostIds.has(post.id);
     button.innerHTML = `
       <span class="fire-icon" aria-hidden="true">&#128293;</span>
       <span class="fire-count">${post.reactions[type] || 0}</span>
@@ -1187,36 +1196,47 @@ async function reportPost(postId) {
 
 async function toggleReaction(postId, type) {
   if (!requireProfile()) return;
+  const profileId = currentProfile.id;
+  if (pendingReactionPostIds.has(postId)) return;
+
   const post = posts.find((item) => item.id === postId);
   if (!post) return;
 
+  pendingReactionPostIds.add(postId);
   const dbType = uiReactionToDb(type);
   let error;
-  if (post.selectedReaction === type) {
-    ({ error } = await supabaseClient
-      .from("post_reactions")
-      .delete()
-      .eq("post_id", postId)
-      .eq("user_id", currentProfile.id));
-  } else {
-    ({ error } = await supabaseClient.from("post_reactions").upsert(
-      {
-        post_id: postId,
-        user_id: currentProfile.id,
-        reaction_type: dbType,
-      },
-      { onConflict: "post_id,user_id" }
-    ));
-  }
+  try {
+    if (post.selectedReaction === type) {
+      ({ error } = await supabaseClient
+        .from("post_reactions")
+        .delete()
+        .eq("post_id", postId)
+        .eq("user_id", profileId));
+    } else {
+      ({ error } = await supabaseClient.from("post_reactions").upsert(
+        {
+          post_id: postId,
+          user_id: profileId,
+          reaction_type: dbType,
+        },
+        { onConflict: "post_id,user_id" }
+      ));
+    }
 
-  if (error) {
-    setStatus(error.message);
-    return;
-  }
+    if (error) {
+      setStatus(error.message);
+      return;
+    }
 
-  animatedReactionPostId = postId;
-  await loadAppData({ showLoading: false });
-  animatedReactionPostId = null;
+    animatedReactionPostId = postId;
+    try {
+      await loadAppData({ showLoading: false });
+    } finally {
+      animatedReactionPostId = null;
+    }
+  } finally {
+    pendingReactionPostIds.delete(postId);
+  }
 }
 
 async function addComment(postId, text, parentCommentId = null) {
