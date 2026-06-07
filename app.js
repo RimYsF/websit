@@ -1,5 +1,10 @@
 const SUPABASE_URL = "https://xrwzgtzdtkvgjrkzeztn.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_UYKQPoCWBdRCWLfwJBCdsw_jMF1mMpt";
+const MEDIA_UPLOAD_ENDPOINT = "https://builder-story-media-api.salahovrafis15.workers.dev";
+const MEDIA_PUBLIC_BASE_URL = "https://pub-470c44e3668947c3be8cfa30672936d5.r2.dev";
+const MAX_MEDIA_FILES_PER_POST = 4;
+const MAX_MEDIA_FILE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const reactionTypes = ["Fire"];
 
 const supabaseClient = window.supabase?.createClient(
@@ -14,7 +19,7 @@ let currentProfile = null;
 let followingIds = new Set();
 let activeView = "feed";
 let activeFilter = "latest";
-let imageFilePreview = "";
+let selectedPostMediaFiles = [];
 let imageReadToken = 0;
 let lastScrollY = window.scrollY;
 let lastSearchScrollY = window.scrollY;
@@ -41,6 +46,7 @@ const composer = document.querySelector("#composer");
 const textInput = document.querySelector("#post-text");
 const imageUrlInput = document.querySelector("#image-url");
 const imageFileInput = document.querySelector("#image-file");
+const avatarFileInput = document.querySelector("#avatar-file");
 const externalUrlInput = document.querySelector("#external-url");
 const imagePreview = document.querySelector("#image-preview");
 const composerPreview = document.querySelector("#composer-preview");
@@ -158,12 +164,18 @@ function normalizeUsername(value) {
 function profileToUser(profile) {
   if (!profile) return null;
   const name = profile.display_name || profile.username || "Builder";
+  const avatarMedia = Array.isArray(profile.avatar_media)
+    ? profile.avatar_media[0]
+    : profile.avatar_media;
   return {
     id: profile.id,
     name,
     username: profile.username,
     handle: `@${profile.username}`,
     avatar: name.slice(0, 1).toUpperCase(),
+    avatarUrl: avatarMedia?.cdn_url || avatarMedia?.public_url || "",
+    avatarObjectKey: avatarMedia?.object_key || "",
+    avatarMediaId: profile.avatar_media_id || avatarMedia?.id || "",
     bio: profile.bio || profile.headline || "",
     postCount: profile.posts_count || 0,
     followersCount: profile.followers_count || 0,
@@ -258,10 +270,38 @@ function isRenderableImageUrl(value) {
   );
 }
 
-function getImageAttachment() {
-  if (isRenderableImageUrl(imageFilePreview)) return imageFilePreview;
-  const imageUrl = imageUrlInput.value.trim();
-  return isRenderableImageUrl(imageUrl) ? imageUrl : "";
+function normalizeMediaItem(item) {
+  const publicUrl = item?.public_url || item?.cdn_url || item?.url || "";
+  return {
+    id: item?.id || item?.object_key || publicUrl,
+    url: publicUrl,
+    objectKey: item?.object_key || "",
+    contentType: item?.content_type || item?.mime_type || "",
+    sizeBytes: item?.size_bytes || item?.byte_size || 0,
+    sortOrder: item?.sort_order || item?.position || 0,
+  };
+}
+
+function getMediaPublicUrl(key) {
+  const cleanBase = MEDIA_PUBLIC_BASE_URL.replace(/\/$/, "");
+  return key ? `${cleanBase}/${key}` : "";
+}
+
+function validateImageFile(file) {
+  if (!ALLOWED_MEDIA_TYPES.has(file.type)) {
+    return "Only JPEG, PNG, WebP, and GIF images are supported.";
+  }
+  if (file.size > MAX_MEDIA_FILE_BYTES) {
+    return "Images must be 10 MB or smaller.";
+  }
+  return "";
+}
+
+function renderAvatarVisual(user, className = "avatar-image") {
+  if (isRenderableImageUrl(user?.avatarUrl)) {
+    return `<img class="${className}" src="${escapeHtml(user.avatarUrl)}" alt="" loading="lazy" decoding="async" />`;
+  }
+  return escapeHtml(user?.avatar || "?");
 }
 
 async function initializeApp() {
@@ -373,7 +413,7 @@ async function loadProfiles() {
   knownProfiles = new Map();
   const { data, error } = await supabaseClient
     .from("profiles")
-    .select("id, username, display_name, bio, headline, posts_count, followers_count, following_count");
+    .select("id, username, display_name, bio, headline, avatar_media_id, posts_count, followers_count, following_count, avatar_media:media_assets!profiles_avatar_media_id_fkey(id, object_key, public_url, cdn_url)");
 
   if (error) {
     setStatus(error.message);
@@ -420,7 +460,7 @@ async function fetchComments(postIds) {
   const { data, error } = await supabaseClient
     .from("comments")
     .select(
-      "id, post_id, parent_comment_id, body, likes_count, created_at, author:profiles!comments_author_id_fkey(id, username, display_name, bio, headline, posts_count, followers_count, following_count)"
+      "id, post_id, parent_comment_id, body, likes_count, created_at, author:profiles!comments_author_id_fkey(id, username, display_name, bio, headline, avatar_media_id, posts_count, followers_count, following_count)"
     )
     .in("post_id", postIds)
     .eq("status", "published")
@@ -495,8 +535,11 @@ async function fetchReactions(postIds) {
 
 function mapPostRow(row, comments, reactions) {
   const authorName = row.author?.display_name || row.author?.username || "Builder";
-  const media = Array.isArray(row.media) ? row.media : [];
-  const image = media.find((item) => item.cdn_url || item.public_url);
+  const rowMedia = Array.isArray(row.media) ? row.media.map(normalizeMediaItem) : [];
+  const media = rowMedia;
+  const image = media.find((item) => isRenderableImageUrl(item.url));
+  const authorHandle = `@${row.author?.username || "builder"}`.toLowerCase();
+  const knownAuthor = knownProfiles.get(authorHandle);
   const link = row.link_preview
     ? {
         url: row.link_preview.normalized_url || row.link_preview.original_url,
@@ -514,9 +557,11 @@ function mapPostRow(row, comments, reactions) {
       name: authorName,
       username: row.author?.username || "builder",
       avatar: authorName.slice(0, 1).toUpperCase(),
+      avatarUrl: knownAuthor?.avatarUrl || "",
     },
     text: row.body,
-    image: image?.cdn_url || image?.public_url || "",
+    image: image?.url || "",
+    images: media.filter((item) => isRenderableImageUrl(item.url)),
     link,
     reactions: reactions || { Fire: row.reactions_count || 0 },
     selectedReaction: dbReactionToUi(row.my_reaction),
@@ -528,12 +573,15 @@ function mapPostRow(row, comments, reactions) {
 
 function mapCommentRow(row, isLiked) {
   const name = row.author?.display_name || row.author?.username || "Builder";
+  const handle = `@${row.author?.username || "builder"}`;
+  const knownAuthor = knownProfiles.get(handle.toLowerCase());
   return {
     id: row.id,
     author: name,
     authorId: row.author?.id,
-    handle: `@${row.author?.username || "builder"}`,
+    handle,
     avatar: name.slice(0, 1).toUpperCase(),
+    avatarUrl: knownAuthor?.avatarUrl || "",
     text: row.body,
     likes: row.likes_count || 0,
     isLiked,
@@ -574,10 +622,10 @@ function updateAuthUi() {
   if (!signedIn) return;
   closeAuthPrompt();
 
-  const user = profileToUser(currentProfile);
+  const user = getKnownUserByHandle(`@${currentProfile.username}`) || profileToUser(currentProfile);
   authName.textContent = user.name;
   authHandle.textContent = user.handle;
-  authAvatar.textContent = user.avatar;
+  authAvatar.innerHTML = renderAvatarVisual(user);
 }
 
 function renderAll() {
@@ -644,7 +692,7 @@ function renderFeedProfile() {
         <span>Back</span>
       </button>
       <div class="profile-topline">
-        <div class="profile-avatar">${escapeHtml(user.avatar)}</div>
+        <div class="profile-avatar">${renderAvatarVisual(user)}</div>
         ${renderFollowButton(user, isOwnProfile)}
       </div>
       <h1>${escapeHtml(user.name)}</h1>
@@ -677,6 +725,10 @@ function renderProfile() {
 
   if (!user) {
     profileAvatar.textContent = "B";
+    profileAvatar.classList.remove("is-editable");
+    profileAvatar.removeAttribute("role");
+    profileAvatar.removeAttribute("tabindex");
+    profileAvatar.removeAttribute("title");
     profileTitle.textContent = "Sign in";
     profileBio.textContent = "Create an account to publish build notes and keep a profile.";
     profileStats.innerHTML = `<span><strong>0</strong> posts</span>`;
@@ -685,7 +737,17 @@ function renderProfile() {
     return;
   }
 
-  profileAvatar.textContent = user.avatar;
+  profileAvatar.innerHTML = renderAvatarVisual(user);
+  profileAvatar.classList.toggle("is-editable", isOwnProfile);
+  if (isOwnProfile) {
+    profileAvatar.setAttribute("role", "button");
+    profileAvatar.setAttribute("tabindex", "0");
+    profileAvatar.title = "Change avatar";
+  } else {
+    profileAvatar.removeAttribute("role");
+    profileAvatar.removeAttribute("tabindex");
+    profileAvatar.removeAttribute("title");
+  }
   profileTitle.textContent = user.name;
   profileBio.textContent = getProfileSummary(user);
   profileCard.classList.toggle("is-readonly", !isOwnProfile);
@@ -745,7 +807,24 @@ function renderPost(post) {
   node.querySelector(".post-text").textContent = post.text;
 
   const image = node.querySelector(".post-image");
-  if (isRenderableImageUrl(post.image)) {
+  const mediaGrid = node.querySelector(".post-media-grid");
+  if ((post.images || []).length > 1) {
+    mediaGrid.className = `post-media-grid post-media-grid-${Math.min(post.images.length, 4)}`;
+    mediaGrid.innerHTML = post.images
+      .slice(0, MAX_MEDIA_FILES_PER_POST)
+      .map(
+        (item) => `
+          <img
+            src="${escapeHtml(item.url)}"
+            alt="Post attachment"
+            loading="lazy"
+            decoding="async"
+          />
+        `
+      )
+      .join("");
+    mediaGrid.hidden = false;
+  } else if (isRenderableImageUrl(post.image)) {
     image.src = post.image;
     image.alt = "Post attachment";
     image.loading = "lazy";
@@ -888,6 +967,7 @@ function getKnownUserByHandle(handle) {
         username: post.author.username,
         handle: `@${post.author.username}`,
         avatar: post.author.avatar,
+        avatarUrl: post.author.avatarUrl || "",
         postCount: posts.filter((item) => item.author.id === post.author.id).length,
         followersCount: 0,
         followingCount: 0,
@@ -911,11 +991,13 @@ function renderProfileTrigger(userLike, className, label) {
     handle: userLike.handle || makeCommentHandle(userLike.author || userLike.name),
     name: userLike.author || userLike.name || "Builder",
     avatar: userLike.avatar || "?",
+    avatarUrl: userLike.avatarUrl || "",
   };
-  const text = label ?? user.avatar;
+  const isAvatar = className.includes("avatar");
+  const text = isAvatar ? renderAvatarVisual(user) : escapeHtml(label ?? user.avatar);
   return `<button class="${className} profile-trigger" type="button" data-user-handle="${escapeHtml(
     user.handle
-  )}" aria-label="Open mini profile ${escapeHtml(user.name)}">${escapeHtml(text)}</button>`;
+  )}" aria-label="Open mini profile ${escapeHtml(user.name)}">${text}</button>`;
 }
 
 function renderRichText(value) {
@@ -1133,14 +1215,106 @@ function renderReplyForm(post, comment) {
   return form;
 }
 
+async function getAccessToken() {
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) throw new Error(error.message);
+  const token = data?.session?.access_token || currentSession?.access_token;
+  if (!token) throw new Error("Sign in to upload media.");
+  return token;
+}
+
+async function uploadMediaFile(kind, file, { postId = "" } = {}) {
+  const validationError = validateImageFile(file);
+  if (validationError) throw new Error(validationError);
+
+  const form = new FormData();
+  form.append("kind", kind);
+  if (postId) form.append("postId", postId);
+  form.append("file", file);
+
+  const response = await fetch(`${MEDIA_UPLOAD_ENDPOINT}/media/upload`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await getAccessToken()}`,
+    },
+    body: form,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Media upload failed.");
+  return payload;
+}
+
+async function deleteMediaObjectKey(key) {
+  if (!key) return;
+  const response = await fetch(`${MEDIA_UPLOAD_ENDPOINT}/media/object`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${await getAccessToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ key }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Media delete failed.");
+}
+
+async function createReadyMediaAsset(purpose, uploadedItem) {
+  const publicUrl = uploadedItem.publicUrl || getMediaPublicUrl(uploadedItem.key);
+  const { data, error } = await supabaseClient
+    .from("media_assets")
+    .insert({
+      owner_id: currentProfile.id,
+      object_key: uploadedItem.key,
+      public_url: publicUrl,
+      cdn_url: publicUrl,
+      purpose,
+      mime_type: uploadedItem.contentType,
+      byte_size: uploadedItem.sizeBytes,
+      upload_status: "pending",
+    })
+    .select("id, object_key, public_url, cdn_url")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  const { error: readyError } = await supabaseClient
+    .from("media_assets")
+    .update({ upload_status: "ready" })
+    .eq("id", data.id)
+    .eq("owner_id", currentProfile.id);
+
+  if (readyError) throw new Error(readyError.message);
+  return data;
+}
+
+async function insertPostMediaRows(postId, mediaAssets) {
+  if (!mediaAssets.length) return;
+  const { error } = await supabaseClient.from("post_media").insert(
+    mediaAssets.map((item, index) => ({
+      post_id: postId,
+      media_id: item.id,
+      position: index,
+    }))
+  );
+  if (error) throw new Error(error.message);
+}
+
+async function cleanupUploadedMedia(uploadedItems) {
+  await Promise.allSettled(uploadedItems.map((item) => deleteMediaObjectKey(item.key)));
+}
+
 async function createPost() {
   if (!requireProfile()) return;
   const text = textInput.value.trim();
   const externalUrl = externalUrlInput.value.trim();
   const link = makeLinkPreview(externalUrl);
-  const image = getImageAttachment();
+  const mediaFiles = selectedPostMediaFiles.map((item) => item.file);
 
   if (!text) return;
+  if (mediaFiles.length > MAX_MEDIA_FILES_PER_POST) {
+    setStatus(`Attach up to ${MAX_MEDIA_FILES_PER_POST} images.`);
+    return;
+  }
 
   const { data: post, error } = await supabaseClient
     .from("posts")
@@ -1157,26 +1331,40 @@ async function createPost() {
     return;
   }
 
-  if (link) {
-    const { error: linkError } = await supabaseClient.from("link_previews").insert({
-      post_id: post.id,
-      original_url: externalUrl,
-      normalized_url: link.url,
-      domain: getDomain(link.url),
-      site_name: link.site,
-      title: link.title,
-      description: link.desc,
-      image_url: link.image,
-      fetch_status: "fallback",
-      fetched_at: new Date().toISOString(),
-    });
-    if (linkError) setStatus(linkError.message);
-  }
+  const uploadedMedia = [];
+  const mediaAssets = [];
+  try {
+    if (link) {
+      const { error: linkError } = await supabaseClient.from("link_previews").insert({
+        post_id: post.id,
+        original_url: externalUrl,
+        normalized_url: link.url,
+        domain: getDomain(link.url),
+        site_name: link.site,
+        title: link.title,
+        description: link.desc,
+        image_url: link.image,
+        fetch_status: "fallback",
+        fetched_at: new Date().toISOString(),
+      });
+      if (linkError) throw new Error(linkError.message);
+    }
 
-  if (image) {
-    setStatus("Post published. Image upload needs Cloudflare R2 wiring next.");
-  } else {
+    for (const file of mediaFiles) {
+      const uploaded = await uploadMediaFile("post", file, { postId: post.id });
+      uploadedMedia.push(uploaded);
+      mediaAssets.push(await createReadyMediaAsset("post_image", uploaded));
+    }
+    await insertPostMediaRows(post.id, mediaAssets);
     setStatus("");
+  } catch (uploadError) {
+    await cleanupUploadedMedia(uploadedMedia);
+    await supabaseClient
+      .from("posts")
+      .update({ status: "deleted", deleted_at: new Date().toISOString() })
+      .eq("id", post.id);
+    setStatus(uploadError.message);
+    return;
   }
 
   composer.reset();
@@ -1191,6 +1379,16 @@ async function deletePost(postId) {
   const confirmed = confirm("Delete this post?");
   if (!confirmed) return;
 
+  const { data: mediaRows, error: mediaError } = await supabaseClient
+    .from("post_media")
+    .select("media_id, media:media_assets!post_media_media_id_fkey(id, object_key)")
+    .eq("post_id", postId);
+
+  if (mediaError) {
+    setStatus(mediaError.message);
+    return;
+  }
+
   const { error } = await supabaseClient
     .from("posts")
     .update({ status: "deleted", deleted_at: new Date().toISOString() })
@@ -1199,6 +1397,24 @@ async function deletePost(postId) {
   if (error) {
     setStatus(error.message);
     return;
+  }
+
+  await Promise.allSettled((mediaRows || []).map((item) => deleteMediaObjectKey(item.media?.object_key)));
+  if ((mediaRows || []).length) {
+    const mediaIds = mediaRows.map((item) => item.media_id);
+    const { error: postMediaDeleteError } = await supabaseClient
+      .from("post_media")
+      .delete()
+      .eq("post_id", postId)
+      .in("media_id", mediaIds);
+    if (postMediaDeleteError) setStatus(postMediaDeleteError.message);
+
+    const { error: markMediaError } = await supabaseClient
+      .from("media_assets")
+      .update({ upload_status: "deleted" })
+      .in("id", mediaIds)
+      .eq("owner_id", currentProfile.id);
+    if (markMediaError) setStatus(markMediaError.message);
   }
   await loadAppData({ showLoading: false });
 }
@@ -1356,6 +1572,60 @@ async function toggleFollow(profileId) {
   await loadAppData({ showLoading: false });
 }
 
+async function updateCurrentAvatar(file) {
+  if (!requireProfile()) return;
+  const validationError = validateImageFile(file);
+  if (validationError) {
+    setStatus(validationError);
+    return;
+  }
+
+  const currentUser = getKnownUserByHandle(`@${currentProfile.username}`) || profileToUser(currentProfile);
+  const previousKey = currentUser.avatarObjectKey || "";
+  const previousMediaId = currentUser.avatarMediaId || currentProfile.avatar_media_id || "";
+  let uploaded = null;
+  let mediaAsset = null;
+  try {
+    setStatus("Uploading avatar...");
+    uploaded = await uploadMediaFile("avatar", file);
+    mediaAsset = await createReadyMediaAsset("avatar", uploaded);
+    const { data, error } = await supabaseClient
+      .from("profiles")
+      .update({
+        avatar_media_id: mediaAsset.id,
+      })
+      .eq("id", currentProfile.id)
+      .select("*")
+      .single();
+
+    if (error) throw new Error(error.message);
+    currentProfile = data;
+    if (previousKey && previousKey !== uploaded.key) {
+      await deleteMediaObjectKey(previousKey).catch(() => {});
+    }
+    if (previousMediaId && previousMediaId !== mediaAsset.id) {
+      await supabaseClient
+        .from("media_assets")
+        .update({ upload_status: "deleted" })
+        .eq("id", previousMediaId)
+        .eq("owner_id", currentProfile.id);
+    }
+    setStatus("");
+    await loadAppData({ showLoading: false });
+  } catch (error) {
+    if (uploaded?.key) await deleteMediaObjectKey(uploaded.key).catch(() => {});
+    if (mediaAsset?.id) {
+      await supabaseClient
+        .from("media_assets")
+        .update({ upload_status: "deleted" })
+        .eq("id", mediaAsset.id)
+        .eq("owner_id", currentProfile.id)
+        .catch(() => {});
+    }
+    setStatus(error.message);
+  }
+}
+
 function requireProfile() {
   if (currentProfile) return true;
   setStatus("Sign in to continue.");
@@ -1389,7 +1659,7 @@ function openProfilePopover(handle, anchor) {
   popover.innerHTML = `
     <div class="profile-popover-art"></div>
     <div class="profile-popover-main">
-      <button class="profile-popover-avatar" type="button" data-open-profile="${escapeHtml(user.handle)}" aria-label="Open ${escapeHtml(user.name)} profile">${escapeHtml(user.avatar)}</button>
+      <button class="profile-popover-avatar" type="button" data-open-profile="${escapeHtml(user.handle)}" aria-label="Open ${escapeHtml(user.name)} profile">${renderAvatarVisual(user)}</button>
       <div class="profile-popover-copy">
         <button class="profile-popover-name" type="button" data-open-profile="${escapeHtml(user.handle)}">${escapeHtml(user.name)}</button>
         <span>${escapeHtml(user.handle)}</span>
@@ -1591,12 +1861,27 @@ function toggleMobileMenu() {
   if (isOpen) setMobileMenuVisibility(1);
 }
 
+function renderSelectedMediaPreviews() {
+  imagePreview.hidden = selectedPostMediaFiles.length === 0;
+  imagePreview.innerHTML = selectedPostMediaFiles
+    .map(
+      (item, index) => `
+        <button class="image-chip" type="button" data-clear-image="${index}">
+          <img src="${escapeHtml(item.previewUrl)}" alt="" />
+          <span>${escapeHtml(item.file.name)}</span>
+          <strong aria-hidden="true">x</strong>
+        </button>
+      `
+    )
+    .join("");
+}
+
 function clearImagePreview() {
   imageReadToken += 1;
   imageFileInput.value = "";
-  imageFilePreview = "";
-  imagePreview.hidden = true;
-  imagePreview.innerHTML = "";
+  selectedPostMediaFiles.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+  selectedPostMediaFiles = [];
+  renderSelectedMediaPreviews();
 }
 
 async function signInWithGoogle() {
@@ -1719,43 +2004,63 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeProfilePopover();
 });
 
+profileAvatar?.addEventListener("click", () => {
+  if (profileAvatar.classList.contains("is-editable")) avatarFileInput?.click();
+});
+
+profileAvatar?.addEventListener("keydown", (event) => {
+  if (!profileAvatar.classList.contains("is-editable")) return;
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  avatarFileInput?.click();
+});
+
+avatarFileInput?.addEventListener("change", async () => {
+  const file = avatarFileInput.files?.[0];
+  avatarFileInput.value = "";
+  if (file) await updateCurrentAvatar(file);
+});
+
 document.querySelector("[data-attach-image]").addEventListener("click", () => {
   imageFileInput.click();
 });
 
 imageFileInput.addEventListener("change", () => {
-  const file = imageFileInput.files?.[0];
+  const files = Array.from(imageFileInput.files || []);
   imageReadToken += 1;
-  const currentToken = imageReadToken;
 
-  if (!file) {
-    clearImagePreview();
+  if (!files.length) {
+    imageFileInput.value = "";
     return;
   }
 
-  const reader = new FileReader();
-  reader.addEventListener("load", () => {
-    if (currentToken !== imageReadToken) return;
+  for (const file of files) {
+    if (selectedPostMediaFiles.length >= MAX_MEDIA_FILES_PER_POST) {
+      setStatus(`Attach up to ${MAX_MEDIA_FILES_PER_POST} images.`);
+      break;
+    }
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setStatus(validationError);
+      continue;
+    }
+    selectedPostMediaFiles.push({
+      file,
+      previewUrl: URL.createObjectURL(file),
+    });
+  }
 
-    const result = String(reader.result || "");
-    imageFilePreview = isRenderableImageUrl(result) ? result : "";
-    if (!imageFilePreview) return;
-
-    imagePreview.hidden = false;
-    imagePreview.innerHTML = `
-      <button class="image-chip" type="button" data-clear-image>
-        <img src="${imageFilePreview}" alt="" />
-        <span>${escapeHtml(file.name)}</span>
-        <strong aria-hidden="true">x</strong>
-      </button>
-    `;
-  });
-  reader.readAsDataURL(file);
+  imageFileInput.value = "";
+  renderSelectedMediaPreviews();
 });
 
 imagePreview.addEventListener("click", (event) => {
-  if (!event.target.closest("[data-clear-image]")) return;
-  clearImagePreview();
+  const clearButton = event.target.closest("[data-clear-image]");
+  if (!clearButton) return;
+  const index = Number(clearButton.dataset.clearImage);
+  const [removed] = selectedPostMediaFiles.splice(index, 1);
+  if (removed) URL.revokeObjectURL(removed.previewUrl);
+  renderSelectedMediaPreviews();
 });
 
 externalUrlInput.addEventListener("input", () => {
