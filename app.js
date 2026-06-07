@@ -62,6 +62,7 @@ const authPrompt = document.querySelector("[data-auth-prompt]");
 const authPromptCopy = document.querySelector("[data-auth-prompt-copy]");
 const authPromptClose = document.querySelector("[data-auth-prompt-close]");
 const authPromptSignin = document.querySelector("[data-auth-prompt-signin]");
+const profilePopoverLayer = document.querySelector("[data-profile-popover-layer]");
 const MOBILE_MENU_HIDE_DISTANCE = 220;
 
 function setStatus(message) {
@@ -1377,7 +1378,7 @@ function renderFollowButton(user, isOwnProfile) {
 
 function openProfilePopover(handle, anchor) {
   const user = getKnownUserByHandle(handle);
-  if (!user) return;
+  if (!user || !profilePopoverLayer) return;
 
   closeProfilePopover();
 
@@ -1401,7 +1402,7 @@ function openProfilePopover(handle, anchor) {
     </div>
   `;
 
-  document.body.append(popover);
+  profilePopoverLayer.append(popover);
   activeProfilePopover = popover;
   popover.querySelectorAll("[data-open-profile]").forEach((button) => {
     button.addEventListener("click", (event) => {
