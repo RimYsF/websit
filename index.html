@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Pacifico&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css?v=20260607-1" />
@@ -137,7 +137,7 @@
               <textarea
                 id="post-text"
                 maxlength="280"
-                placeholder="What did you ship?"
+                placeholder="What's new today?"
                 required
               ></textarea>
 
@@ -149,8 +149,14 @@
 
               <div class="composer-actions">
                 <div class="composer-tools">
-                  <button class="tool-button" type="button" data-attach-image title="Attach image">
-                    Image
+                  <button
+                    class="tool-button add-media-button"
+                    type="button"
+                    data-attach-image
+                    title="Attach image"
+                    aria-label="Attach image"
+                  >
+                    +
                   </button>
                   <label class="link-field">
                     <span>Link</span>
@@ -213,6 +219,22 @@
         </div>
       </article>
     </template>
+
+    <div class="auth-prompt" data-auth-prompt hidden>
+      <section class="auth-prompt-card" role="dialog" aria-modal="true" aria-labelledby="auth-prompt-title">
+        <button class="auth-prompt-close" type="button" data-auth-prompt-close aria-label="Close">
+          ...
+        </button>
+        <p class="auth-prompt-kicker">Builder Story</p>
+        <h2 id="auth-prompt-title">Join the builders already shipping.</h2>
+        <p data-auth-prompt-copy>
+          Sign in to react, comment, follow projects, and keep your own build log in one clean place.
+        </p>
+        <button class="auth-prompt-action" type="button" data-auth-prompt-signin>
+          Continue with Google
+        </button>
+      </section>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="app.js?v=20260607-1" defer></script>

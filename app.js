@@ -17,6 +17,7 @@ let activeFilter = "latest";
 let imageFilePreview = "";
 let imageReadToken = 0;
 let lastScrollY = window.scrollY;
+let lastSearchScrollY = window.scrollY;
 let mobileMenuVisibility = 1;
 let animatedReactionPostId = null;
 let activeReplyTarget = null;
@@ -53,6 +54,12 @@ const authAvatar = document.querySelector("[data-auth-avatar]");
 const authSignout = document.querySelector("[data-auth-signout]");
 const themeToggle = document.querySelector("[data-theme-toggle]");
 const newPostButton = document.querySelector("[data-new-post]");
+const settingsButton = document.querySelector("[data-settings-button]");
+const topSearch = document.querySelector(".top-search");
+const authPrompt = document.querySelector("[data-auth-prompt]");
+const authPromptCopy = document.querySelector("[data-auth-prompt-copy]");
+const authPromptClose = document.querySelector("[data-auth-prompt-close]");
+const authPromptSignin = document.querySelector("[data-auth-prompt-signin]");
 const MOBILE_MENU_HIDE_DISTANCE = 220;
 
 function setStatus(message) {
@@ -86,6 +93,53 @@ function initializeTheme() {
   const stored = getStoredTheme();
   const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
   setTheme(stored || (prefersDark ? "dark" : "light"));
+}
+
+function showAuthPrompt(copy) {
+  if (!authPrompt) return;
+  if (authPromptCopy && copy) authPromptCopy.textContent = copy;
+  authPrompt.hidden = false;
+  authPromptSignin?.focus();
+}
+
+function closeAuthPrompt() {
+  if (authPrompt) authPrompt.hidden = true;
+}
+
+function getProfileRouteHandle() {
+  const params = new URLSearchParams(window.location.search);
+  const handle = params.get("handle");
+  return handle ? `@${normalizeUsername(handle)}` : "";
+}
+
+function writeRouteForView(viewName, mode = "push") {
+  const url = new URL(window.location.href);
+  if (viewName === "profile") {
+    url.searchParams.set("view", "profile");
+    const handle = activeProfileHandle || (currentProfile ? `@${currentProfile.username}` : "");
+    if (handle) url.searchParams.set("handle", handle.replace(/^@/, ""));
+  } else {
+    url.searchParams.delete("view");
+    url.searchParams.delete("handle");
+  }
+
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  if (next === `${window.location.pathname}${window.location.search}${window.location.hash}`) return;
+  history[mode === "replace" ? "replaceState" : "pushState"]({ view: viewName }, "", next);
+}
+
+function applyRouteFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const routeView = params.get("view");
+  if (routeView === "profile") {
+    feedProfileHandle = null;
+    activeProfileHandle = getProfileRouteHandle() || activeProfileHandle || (currentProfile ? `@${currentProfile.username}` : "");
+    switchView("profile");
+    return;
+  }
+
+  feedProfileHandle = null;
+  switchView("feed");
 }
 
 function normalizeUsername(value) {
@@ -284,6 +338,7 @@ async function loadAppData({ showLoading = true } = {}) {
   updateAuthUi();
   isLoading = false;
   const restoreScroll = showLoading ? null : { left: window.scrollX, top: window.scrollY };
+  applyRouteFromLocation();
   renderAll();
   if (restoreScroll) window.scrollTo(restoreScroll.left, restoreScroll.top);
 }
@@ -321,6 +376,11 @@ async function loadProfiles() {
 }
 
 async function loadPosts() {
+  if (activeFilter === "following" && !currentProfile) {
+    posts = [];
+    return;
+  }
+
   const viewName = activeFilter === "following" && currentProfile ? "feed_following" : "feed_latest";
   const { data: rows, error } = await supabaseClient
     .from(viewName)
@@ -480,6 +540,7 @@ function updateAuthUi() {
   composer.hidden = !signedIn || activeProfileHandle !== `@${currentProfile?.username}`;
 
   if (!signedIn) return;
+  closeAuthPrompt();
 
   const user = profileToUser(currentProfile);
   authName.textContent = user.name;
@@ -502,12 +563,32 @@ function renderFeed() {
   postList.hidden = false;
   feedProfileView.hidden = true;
   feedProfileView.innerHTML = "";
+
+  if (!isLoading && activeFilter === "following" && !currentProfile) {
+    renderAuthInvite(
+      postList,
+      "Follow builders, keep up with launches, and turn the feed into your own build room."
+    );
+    return;
+  }
+
   renderPostList(postList, posts, {
-    emptyText:
-      activeFilter === "following" && !currentProfile
-        ? "Sign in to see posts from builders you follow."
-        : "No posts here yet.",
+    emptyText: "No posts here yet.",
   });
+}
+
+function renderAuthInvite(container, copy) {
+  container.innerHTML = "";
+  const invite = document.createElement("section");
+  invite.className = "empty-state auth-inline-card";
+  invite.innerHTML = `
+    <p class="auth-inline-kicker">Sign in required</p>
+    <h2>Make Builder Story yours.</h2>
+    <p>${escapeHtml(copy)}</p>
+    <button type="button">Continue with Google</button>
+  `;
+  invite.querySelector("button").addEventListener("click", () => showAuthPrompt(copy));
+  container.append(invite);
 }
 
 function renderFeedProfile() {
@@ -1224,7 +1305,10 @@ async function toggleFollow(profileId) {
 
 function requireProfile() {
   if (currentProfile) return true;
-  setStatus("Sign in first.");
+  setStatus("Sign in to continue.");
+  showAuthPrompt(
+    "Create a profile to react, comment, follow builders, and keep your own launch history."
+  );
   return false;
 }
 
@@ -1319,11 +1403,12 @@ function openUserProfile(handle) {
   const user = getKnownUserByHandle(handle);
   if (!user) return;
 
-  feedProfileHandle = user.handle;
+  activeProfileHandle = user.handle;
+  feedProfileHandle = null;
   closeProfilePopover();
   closeMobileMenu();
-  switchView("feed");
-  renderFeed();
+  switchView("profile", { push: true });
+  renderAll();
 }
 
 function closeFeedProfile() {
@@ -1383,7 +1468,7 @@ function closePostMenus() {
   });
 }
 
-function switchView(viewName) {
+function switchView(viewName, options = {}) {
   activeView = viewName;
   document
     .querySelectorAll("[data-view]")
@@ -1391,6 +1476,9 @@ function switchView(viewName) {
   document
     .querySelectorAll(".view")
     .forEach((view) => view.classList.toggle("is-active", view.id === `${viewName}-view`));
+  if (options.push || options.replace) {
+    writeRouteForView(viewName, options.replace ? "replace" : "push");
+  }
 }
 
 function closeMobileMenu() {
@@ -1421,6 +1509,23 @@ function handleMobileMenuScroll() {
     setMobileMenuVisibility(mobileMenuVisibility - delta / MOBILE_MENU_HIDE_DISTANCE);
   } else if (delta < 0) {
     setMobileMenuVisibility(1);
+  }
+}
+
+function handleSearchBarScroll() {
+  if (!topSearch) return;
+  const currentScrollY = Math.max(0, window.scrollY);
+  const delta = currentScrollY - lastSearchScrollY;
+  lastSearchScrollY = currentScrollY;
+
+  topSearch.classList.toggle("is-floating", currentScrollY > 24);
+  if (currentScrollY < 80 || delta < -8) {
+    topSearch.classList.remove("is-hidden");
+    return;
+  }
+
+  if (delta > 12) {
+    topSearch.classList.add("is-hidden");
   }
 }
 
@@ -1464,10 +1569,14 @@ async function signInWithGoogle() {
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
     if (button.dataset.view === "feed") feedProfileHandle = null;
+    if (button.dataset.view === "profile" && !currentProfile) {
+      showAuthPrompt("Sign in to publish updates, save your profile, and keep a public build story.");
+      return;
+    }
     if (button.dataset.view === "profile" && currentProfile) {
       activeProfileHandle = `@${currentProfile.username}`;
     }
-    switchView(button.dataset.view);
+    switchView(button.dataset.view, { push: true });
     renderAll();
     closeMobileMenu();
   });
@@ -1479,16 +1588,25 @@ themeToggle?.addEventListener("click", () => {
 
 newPostButton?.addEventListener("click", () => {
   if (!currentProfile) {
-    setStatus("Sign in to publish a post.");
-    googleSigninButton?.focus();
+    showAuthPrompt("Sign in to post what you shipped and get feedback from other builders.");
     return;
   }
 
   activeProfileHandle = `@${currentProfile.username}`;
-  switchView("profile");
+  switchView("profile", { push: true });
   renderAll();
   closeMobileMenu();
   requestAnimationFrame(() => textInput?.focus());
+});
+
+settingsButton?.addEventListener("click", () => {
+  showAuthPrompt("Settings are tied to your Builder Story profile. Sign in to manage them.");
+});
+
+authPromptClose?.addEventListener("click", closeAuthPrompt);
+authPromptSignin?.addEventListener("click", signInWithGoogle);
+authPrompt?.addEventListener("click", (event) => {
+  if (event.target === authPrompt) closeAuthPrompt();
 });
 
 googleSigninButton.addEventListener("click", signInWithGoogle);
@@ -1498,7 +1616,18 @@ authSignout.addEventListener("click", async () => {
 
 mobileMenuButton.addEventListener("click", toggleMobileMenu);
 window.addEventListener("scroll", handleMobileMenuScroll, { passive: true });
-window.addEventListener("scroll", lockProfilePopoverPosition, { passive: true });
+window.addEventListener("scroll", handleSearchBarScroll, { passive: true });
+window.addEventListener(
+  "wheel",
+  (event) => {
+    if (event.deltaY < 0) topSearch?.classList.remove("is-hidden");
+  },
+  { passive: true }
+);
+window.addEventListener("popstate", () => {
+  applyRouteFromLocation();
+  renderAll();
+});
 
 document.querySelectorAll("[data-feed-filter]").forEach((button) => {
   button.addEventListener("click", async () => {
