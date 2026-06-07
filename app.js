@@ -22,6 +22,7 @@ let mobileMenuVisibility = 1;
 let animatedReactionPostId = null;
 let activeReplyTarget = null;
 let activeProfilePopover = null;
+let activeProfilePopoverPosition = null;
 let activeProfileHandle = "";
 let feedProfileHandle = null;
 let isLoading = true;
@@ -539,6 +540,28 @@ function mapCommentRow(row, isLiked) {
     replies: [],
     createdAt: row.created_at,
   };
+}
+
+function applyOptimisticReaction(post, type) {
+  const previousReaction = post.selectedReaction;
+  post.reactions = { ...post.reactions };
+
+  if (previousReaction === type) {
+    post.selectedReaction = null;
+    post.reactions[type] = Math.max(0, (post.reactions[type] || 0) - 1);
+    return;
+  }
+
+  if (previousReaction) {
+    post.reactions[previousReaction] = Math.max(0, (post.reactions[previousReaction] || 0) - 1);
+  }
+  post.selectedReaction = type;
+  post.reactions[type] = (post.reactions[type] || 0) + 1;
+}
+
+function restoreReaction(post, snapshot) {
+  post.selectedReaction = snapshot.selectedReaction;
+  post.reactions = { ...snapshot.reactions };
 }
 
 function updateAuthUi() {
@@ -1202,11 +1225,20 @@ async function toggleReaction(postId, type) {
   const post = posts.find((item) => item.id === postId);
   if (!post) return;
 
+  const snapshot = {
+    selectedReaction: post.selectedReaction,
+    reactions: { ...post.reactions },
+  };
   pendingReactionPostIds.add(postId);
   const dbType = uiReactionToDb(type);
   let error;
+
+  applyOptimisticReaction(post, type);
+  animatedReactionPostId = postId;
+  renderAll();
+
   try {
-    if (post.selectedReaction === type) {
+    if (snapshot.selectedReaction === type) {
       ({ error } = await supabaseClient
         .from("post_reactions")
         .delete()
@@ -1224,18 +1256,18 @@ async function toggleReaction(postId, type) {
     }
 
     if (error) {
+      restoreReaction(post, snapshot);
       setStatus(error.message);
+      renderAll();
       return;
     }
 
-    animatedReactionPostId = postId;
-    try {
-      await loadAppData({ showLoading: false });
-    } finally {
-      animatedReactionPostId = null;
-    }
-  } finally {
     pendingReactionPostIds.delete(postId);
+    await loadAppData({ showLoading: false });
+  } finally {
+    animatedReactionPostId = null;
+    pendingReactionPostIds.delete(postId);
+    renderAll();
   }
 }
 
@@ -1383,6 +1415,7 @@ function openProfilePopover(handle, anchor) {
 function closeProfilePopover() {
   activeProfilePopover?.remove();
   activeProfilePopover = null;
+  activeProfilePopoverPosition = null;
 }
 
 function positionProfilePopover(popover, anchor) {
@@ -1402,14 +1435,13 @@ function positionProfilePopover(popover, anchor) {
 
   popover.style.left = `${left}px`;
   popover.style.top = `${top}px`;
-  popover.dataset.fixedLeft = String(left);
-  popover.dataset.fixedTop = String(top);
+  activeProfilePopoverPosition = { left, top };
 }
 
 function lockProfilePopoverPosition() {
-  if (!activeProfilePopover) return;
-  activeProfilePopover.style.left = `${activeProfilePopover.dataset.fixedLeft}px`;
-  activeProfilePopover.style.top = `${activeProfilePopover.dataset.fixedTop}px`;
+  if (!activeProfilePopover || !activeProfilePopoverPosition) return;
+  activeProfilePopover.style.left = `${activeProfilePopoverPosition.left}px`;
+  activeProfilePopover.style.top = `${activeProfilePopoverPosition.top}px`;
 }
 
 function getProfileSummary(user) {
@@ -1640,6 +1672,8 @@ authSignout.addEventListener("click", async () => {
 mobileMenuButton.addEventListener("click", toggleMobileMenu);
 window.addEventListener("scroll", handleMobileMenuScroll, { passive: true });
 window.addEventListener("scroll", handleSearchBarScroll, { passive: true });
+window.addEventListener("scroll", lockProfilePopoverPosition, { passive: true });
+window.addEventListener("resize", lockProfilePopoverPosition, { passive: true });
 window.addEventListener(
   "wheel",
   (event) => {
