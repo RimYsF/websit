@@ -1482,11 +1482,13 @@ function switchView(viewName, options = {}) {
 }
 
 function closeMobileMenu() {
+  if (!mobileMenuButton) return;
   rail.classList.remove("is-open");
   mobileMenuButton.setAttribute("aria-expanded", "false");
 }
 
 function setMobileMenuVisibility(value) {
+  if (!mobileMenuButton) return;
   mobileMenuVisibility = Math.min(1, Math.max(0, value));
   mobileMenuButton.style.setProperty(
     "--mobile-menu-visibility",
@@ -1530,6 +1532,7 @@ function handleSearchBarScroll() {
 }
 
 function toggleMobileMenu() {
+  if (!mobileMenuButton) return;
   const isOpen = rail.classList.toggle("is-open");
   mobileMenuButton.setAttribute("aria-expanded", String(isOpen));
   if (isOpen) setMobileMenuVisibility(1);
