@@ -4,8 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Builder Story</title>
-    <link rel="preconnect" href="https://images.unsplash.com" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css?v=20260607-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -19,70 +24,49 @@
         >
           <span></span>
         </button>
-        <div class="mobile-panel-head" aria-hidden="true">
-          <div class="mobile-panel-mark">BS</div>
-          <div class="mobile-panel-copy">
-            <span>Builder Story</span>
-            <strong>Developer feed</strong>
-            <small>Build notes, repos and feedback</small>
-          </div>
-          <div class="mobile-panel-orbit"></div>
+
+        <div class="brand-row">
+          <a class="brand-wordmark" href="#feed-view" aria-label="Builder Story home">
+            Builder Story<span>.</span>
+          </a>
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle theme">
+            <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M20.4 15.1A8.3 8.3 0 0 1 8.9 3.6 9.1 9.1 0 1 0 20.4 15.1Z"
+              />
+            </svg>
+            <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4.25" />
+              <path d="M12 2.75v2.2M12 19.05v2.2M21.25 12h-2.2M4.95 12h-2.2" />
+              <path d="m18.55 5.45-1.55 1.55M7 17l-1.55 1.55M18.55 18.55 17 17M7 7 5.45 5.45" />
+            </svg>
+          </button>
         </div>
-        <div class="rail-panel-head">
-          <div class="rail-panel-mark">BS</div>
-          <div class="rail-panel-copy">
-            <span>Builder Story</span>
-            <strong>Build feed</strong>
-          </div>
-        </div>
+
         <nav class="builder-dock" aria-label="Main navigation">
-          <button
-            class="dock-tab is-active"
-            type="button"
-            data-view="feed"
-            aria-label="Лента"
-          >
+          <button class="dock-tab is-active" type="button" data-view="feed">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 11.5 12 4l9 7.5" />
-              <path d="M5 10.5V20h14v-9.5" />
-              <path d="M9 20v-6h6v6" />
+              <path d="M3.5 11.5 12 4l8.5 7.5" />
+              <path d="M6.5 10.5V20h5v-5.5h3V20h5v-9.5" />
             </svg>
-            <span>Лента</span>
+            <span>Home</span>
           </button>
-          <button
-            class="dock-tab"
-            type="button"
-            data-view="profile"
-            aria-label="Профиль"
-          >
+          <button class="dock-tab" type="button" data-view="profile">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M20 21a8 8 0 0 0-16 0" />
-              <path d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z" />
+              <path d="M12 11.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+              <path d="M4.5 21c.65-4.2 3.2-6.4 7.5-6.4s6.85 2.2 7.5 6.4" />
             </svg>
-            <span>Профиль</span>
+            <span>Profile</span>
           </button>
-          <button
-            class="dock-tab"
-            type="button"
-            aria-label="Настройки"
-          >
+          <button class="dock-tab" type="button" data-settings-button>
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" />
-              <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04-2.05 2.05-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.09 1.65V20.4h-2.9v-.08a1.8 1.8 0 0 0-1.09-1.65 1.8 1.8 0 0 0-1.98.36l-.04.04-2.05-2.05.04-.04A1.8 1.8 0 0 0 4.98 15a1.8 1.8 0 0 0-1.65-1.09H3.25v-2.9h.08a1.8 1.8 0 0 0 1.65-1.09 1.8 1.8 0 0 0-.36-1.98l-.04-.04 2.05-2.05.04.04a1.8 1.8 0 0 0 1.98.36 1.8 1.8 0 0 0 1.09-1.65V3.6h2.9v.08a1.8 1.8 0 0 0 1.09 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04 2.05 2.05-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.09h.08v2.9h-.08A1.8 1.8 0 0 0 19.4 15z" />
+              <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+              <path d="M19 12a7 7 0 0 0-.1-1.1l2-1.55-2-3.45-2.35.95a7 7 0 0 0-1.9-1.1L14.3 3h-4.6l-.35 2.75a7 7 0 0 0-1.9 1.1L5.1 5.9l-2 3.45 2 1.55a7.2 7.2 0 0 0 0 2.2l-2 1.55 2 3.45 2.35-.95a7 7 0 0 0 1.9 1.1l.35 2.75h4.6l.35-2.75a7 7 0 0 0 1.9-1.1l2.35.95 2-3.45-2-1.55c.05-.35.1-.72.1-1.1Z" />
             </svg>
-            <span>Настройки</span>
+            <span>Settings</span>
           </button>
         </nav>
-        <div class="rail-feed-filter">
-          <div class="segmented" role="tablist" aria-label="Feed filter">
-            <button class="segment is-active" type="button" data-feed-filter="latest">
-              Latest
-            </button>
-            <button class="segment" type="button" data-feed-filter="following">
-              Following
-            </button>
-          </div>
-        </div>
+
         <section class="auth-card" aria-label="Account">
           <div class="auth-signed-out" data-auth-signed-out>
             <button class="google-auth-button" type="button" data-google-signin>
@@ -94,18 +78,38 @@
           <div class="auth-signed-in" data-auth-signed-in hidden>
             <div class="auth-user">
               <span class="auth-avatar" data-auth-avatar>A</span>
-              <span>
+              <span class="auth-copy">
                 <strong data-auth-name>Builder</strong>
                 <small data-auth-handle>@builder</small>
               </span>
             </div>
+            <button class="new-post-button" type="button" data-new-post>New post +</button>
             <button class="auth-submit auth-signout" type="button" data-auth-signout>Sign out</button>
           </div>
         </section>
       </aside>
 
       <main class="timeline">
+        <div class="top-search">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m20 20-4.3-4.3" />
+            <path d="M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
+          </svg>
+          <label class="sr-only" for="global-search">Search people, posts, tags</label>
+          <input id="global-search" type="search" placeholder="Search people, posts, tags" />
+        </div>
+
         <section class="view is-active" id="feed-view" aria-label="Feed">
+          <div class="feed-filter-bar">
+            <div class="segmented" role="tablist" aria-label="Feed filter">
+              <button class="segment is-active" type="button" data-feed-filter="latest">
+                For you
+              </button>
+              <button class="segment" type="button" data-feed-filter="following">
+                Following
+              </button>
+            </div>
+          </div>
           <div class="post-list" id="post-list" aria-live="polite"></div>
           <div class="feed-profile-view" id="feed-profile-view" hidden></div>
         </section>
@@ -133,7 +137,7 @@
               <textarea
                 id="post-text"
                 maxlength="280"
-                placeholder="Share a build note, repo update or repost..."
+                placeholder="What did you ship?"
                 required
               ></textarea>
 
@@ -158,7 +162,7 @@
                   </label>
                 </div>
                 <button class="send-button" type="submit" aria-label="Publish post">
-                  ↑
+                  Publish
                 </button>
               </div>
             </div>
@@ -174,7 +178,7 @@
         <div class="post-avatar"></div>
         <div class="post-main">
           <header class="post-meta">
-            <div>
+            <div class="post-meta-copy">
               <strong class="post-author"></strong>
               <span class="post-username"></span>
               <span class="post-time"></span>
@@ -186,7 +190,7 @@
                 aria-label="Post actions"
                 aria-expanded="false"
               >
-                ···
+                ...
               </button>
               <div class="post-menu" hidden>
                 <button class="post-menu-delete" type="button">Delete</button>
@@ -211,6 +215,6 @@
     </template>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js" defer></script>
+    <script src="app.js?v=20260607-1" defer></script>
   </body>
 </html>

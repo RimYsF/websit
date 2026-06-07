@@ -51,10 +51,41 @@ const authName = document.querySelector("[data-auth-name]");
 const authHandle = document.querySelector("[data-auth-handle]");
 const authAvatar = document.querySelector("[data-auth-avatar]");
 const authSignout = document.querySelector("[data-auth-signout]");
+const themeToggle = document.querySelector("[data-theme-toggle]");
+const newPostButton = document.querySelector("[data-new-post]");
 const MOBILE_MENU_HIDE_DISTANCE = 220;
 
 function setStatus(message) {
   if (authStatus) authStatus.textContent = message || "";
+}
+
+function getStoredTheme() {
+  try {
+    return localStorage.getItem("builder-story-theme");
+  } catch {
+    return "";
+  }
+}
+
+function storeTheme(theme) {
+  try {
+    localStorage.setItem("builder-story-theme", theme);
+  } catch {
+    // localStorage can be blocked in some embedded previews.
+  }
+}
+
+function setTheme(theme) {
+  const isDark = theme === "dark";
+  document.body.classList.toggle("theme-dark", isDark);
+  themeToggle?.setAttribute("aria-pressed", String(isDark));
+  storeTheme(isDark ? "dark" : "light");
+}
+
+function initializeTheme() {
+  const stored = getStoredTheme();
+  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
+  setTheme(stored || (prefersDark ? "dark" : "light"));
 }
 
 function normalizeUsername(value) {
@@ -597,7 +628,7 @@ function renderPost(post) {
     post.author.name
   );
   node.querySelector(".post-username").innerHTML = ` ${renderUserMention(authorHandle)}`;
-  node.querySelector(".post-time").textContent = ` · ${timeAgo(post.createdAt)}`;
+  node.querySelector(".post-time").textContent = ` ${timeAgo(post.createdAt)}`;
   node.querySelector(".post-text").textContent = post.text;
 
   const image = node.querySelector(".post-image");
@@ -1442,6 +1473,24 @@ document.querySelectorAll("[data-view]").forEach((button) => {
   });
 });
 
+themeToggle?.addEventListener("click", () => {
+  setTheme(document.body.classList.contains("theme-dark") ? "light" : "dark");
+});
+
+newPostButton?.addEventListener("click", () => {
+  if (!currentProfile) {
+    setStatus("Sign in to publish a post.");
+    googleSigninButton?.focus();
+    return;
+  }
+
+  activeProfileHandle = `@${currentProfile.username}`;
+  switchView("profile");
+  renderAll();
+  closeMobileMenu();
+  requestAnimationFrame(() => textInput?.focus());
+});
+
 googleSigninButton.addEventListener("click", signInWithGoogle);
 authSignout.addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
@@ -1549,4 +1598,5 @@ composer.addEventListener("submit", async (event) => {
   await createPost();
 });
 
+initializeTheme();
 initializeApp();
