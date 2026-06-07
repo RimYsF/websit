@@ -38,6 +38,7 @@ let activeProfilePopoverPosition = null;
 let activeProfileHandle = "";
 let feedProfileHandle = null;
 let isLoading = true;
+let isPublishingPost = false;
 const openCommentPostIds = new Set();
 const pendingReactionPostIds = new Set();
 
@@ -782,6 +783,10 @@ function renderProfile() {
   profileBio.textContent = getProfileSummary(user);
   profileCard.classList.toggle("is-readonly", !isOwnProfile);
   composer.hidden = !isOwnProfile;
+  composer.classList.toggle("is-publishing", isPublishingPost);
+  composer.querySelectorAll("textarea, input, button").forEach((control) => {
+    control.disabled = isPublishingPost;
+  });
   profileStats.innerHTML = `
     <span><strong>${user.postCount}</strong> posts</span>
     <span><strong>${user.followersCount}</strong> followers</span>
@@ -1336,6 +1341,7 @@ async function cleanupUploadedMedia(uploadedItems) {
 
 async function createPost() {
   if (!requireProfile()) return;
+  if (isPublishingPost) return;
   const text = textInput.value.trim();
   const externalUrl = externalUrlInput.value.trim();
   const link = makeLinkPreview(externalUrl);
@@ -1347,18 +1353,26 @@ async function createPost() {
     return;
   }
 
+  isPublishingPost = true;
+  setStatus(mediaFiles.length ? "Uploading media..." : "Publishing...");
+  renderAll();
+
+  const shouldPublishAfterAssets = Boolean(link || mediaFiles.length);
   const { data: post, error } = await supabaseClient
     .from("posts")
     .insert({
       author_id: currentProfile.id,
       body: text,
       post_type: link ? "link_repost" : "build_note",
+      status: shouldPublishAfterAssets ? "hidden" : "published",
     })
     .select("id")
     .single();
 
   if (error) {
+    isPublishingPost = false;
     setStatus(error.message);
+    renderAll();
     return;
   }
 
@@ -1387,6 +1401,14 @@ async function createPost() {
       mediaAssets.push(await createReadyMediaAsset("post_image", uploaded));
     }
     await insertPostMediaRows(post.id, mediaAssets);
+    if (shouldPublishAfterAssets) {
+      const { error: publishError } = await supabaseClient
+        .from("posts")
+        .update({ status: "published" })
+        .eq("id", post.id)
+        .eq("author_id", currentProfile.id);
+      if (publishError) throw new Error(publishError.message);
+    }
     setStatus("");
   } catch (uploadError) {
     await cleanupUploadedMedia(uploadedMedia);
@@ -1394,10 +1416,13 @@ async function createPost() {
       .from("posts")
       .update({ status: "deleted", deleted_at: new Date().toISOString() })
       .eq("id", post.id);
+    isPublishingPost = false;
     setStatus(uploadError.message);
+    renderAll();
     return;
   }
 
+  isPublishingPost = false;
   composer.reset();
   clearImagePreview();
   composerPreview.hidden = true;

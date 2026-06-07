@@ -1326,6 +1326,17 @@ body.theme-dark .comment-avatar {
   margin-top: 16px;
 }
 
+.composer.is-publishing {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.composer textarea:disabled,
+.composer input:disabled,
+.composer button:disabled {
+  cursor: wait;
+}
+
 .composer-main {
   display: grid;
   gap: 16px;
