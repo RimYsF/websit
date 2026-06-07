@@ -5,6 +5,13 @@ const MEDIA_PUBLIC_BASE_URL = "https://pub-470c44e3668947c3be8cfa30672936d5.r2.d
 const MAX_MEDIA_FILES_PER_POST = 4;
 const MAX_MEDIA_FILE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const MEDIA_EXTENSION_TYPES = new Map([
+  ["jpg", "image/jpeg"],
+  ["jpeg", "image/jpeg"],
+  ["png", "image/png"],
+  ["webp", "image/webp"],
+  ["gif", "image/gif"],
+]);
 const reactionTypes = ["Fire"];
 
 const supabaseClient = window.supabase?.createClient(
@@ -288,13 +295,36 @@ function getMediaPublicUrl(key) {
 }
 
 function validateImageFile(file) {
-  if (!ALLOWED_MEDIA_TYPES.has(file.type)) {
+  const contentType = getImageContentType(file);
+  if (!ALLOWED_MEDIA_TYPES.has(contentType)) {
     return "Only JPEG, PNG, WebP, and GIF images are supported.";
   }
   if (file.size > MAX_MEDIA_FILE_BYTES) {
     return "Images must be 10 MB or smaller.";
   }
   return "";
+}
+
+function getFileExtension(file) {
+  const name = String(file?.name || "");
+  const extension = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
+  return extension || "";
+}
+
+function getImageContentType(file) {
+  const rawType = String(file?.type || "").toLowerCase();
+  if (rawType === "image/jpg") return "image/jpeg";
+  if (ALLOWED_MEDIA_TYPES.has(rawType)) return rawType;
+  return MEDIA_EXTENSION_TYPES.get(getFileExtension(file)) || rawType;
+}
+
+function normalizeImageFile(file) {
+  const contentType = getImageContentType(file);
+  if (!ALLOWED_MEDIA_TYPES.has(contentType) || file.type === contentType) return file;
+  return new File([file], file.name || `image.${contentType.split("/")[1]}`, {
+    type: contentType,
+    lastModified: file.lastModified || Date.now(),
+  });
 }
 
 function renderAvatarVisual(user, className = "avatar-image") {
@@ -1226,11 +1256,12 @@ async function getAccessToken() {
 async function uploadMediaFile(kind, file, { postId = "" } = {}) {
   const validationError = validateImageFile(file);
   if (validationError) throw new Error(validationError);
+  const uploadFile = normalizeImageFile(file);
 
   const form = new FormData();
   form.append("kind", kind);
   if (postId) form.append("postId", postId);
-  form.append("file", file);
+  form.append("file", uploadFile);
 
   const response = await fetch(`${MEDIA_UPLOAD_ENDPOINT}/media/upload`, {
     method: "POST",
@@ -1379,12 +1410,19 @@ async function deletePost(postId) {
   const confirmed = confirm("Delete this post?");
   if (!confirmed) return;
 
+  const previousPosts = posts;
+  const postToDelete = posts.find((post) => post.id === postId);
+  posts = posts.filter((post) => post.id !== postId);
+  renderAll();
+
   const { data: mediaRows, error: mediaError } = await supabaseClient
     .from("post_media")
     .select("media_id, media:media_assets!post_media_media_id_fkey(id, object_key)")
     .eq("post_id", postId);
 
   if (mediaError) {
+    posts = previousPosts;
+    renderAll();
     setStatus(mediaError.message);
     return;
   }
@@ -1395,6 +1433,8 @@ async function deletePost(postId) {
     .eq("id", postId);
 
   if (error) {
+    posts = previousPosts;
+    renderAll();
     setStatus(error.message);
     return;
   }
@@ -1416,7 +1456,8 @@ async function deletePost(postId) {
       .eq("owner_id", currentProfile.id);
     if (markMediaError) setStatus(markMediaError.message);
   }
-  await loadAppData({ showLoading: false });
+  if (postToDelete) setStatus("");
+  loadAppData({ showLoading: false }).catch((refreshError) => setStatus(refreshError.message));
 }
 
 async function reportPost(postId) {
@@ -2044,9 +2085,10 @@ imageFileInput.addEventListener("change", () => {
       setStatus(validationError);
       continue;
     }
+    const normalizedFile = normalizeImageFile(file);
     selectedPostMediaFiles.push({
-      file,
-      previewUrl: URL.createObjectURL(file),
+      file: normalizedFile,
+      previewUrl: URL.createObjectURL(normalizedFile),
     });
   }
 
