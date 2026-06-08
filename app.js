@@ -5,6 +5,7 @@ const MEDIA_PUBLIC_BASE_URL = "https://pub-470c44e3668947c3be8cfa30672936d5.r2.d
 const MAX_MEDIA_FILES_PER_POST = 4;
 const MAX_MEDIA_FILE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const PENDING_POST_UPLOAD_INTENTS_KEY = "builder-story-pending-post-upload-intents";
 const MEDIA_EXTENSION_TYPES = new Map([
   ["jpg", "image/jpeg"],
   ["jpeg", "image/jpeg"],
@@ -414,6 +415,7 @@ async function loadAppData({ showLoading = true } = {}) {
   await ensureCurrentProfile();
   await loadFollowing();
   await loadProfiles();
+  await resumePendingPostUploads();
   await loadPosts();
 
   updateAuthUi();
@@ -1323,13 +1325,41 @@ async function createReadyMediaAsset(purpose, uploadedItem) {
   return data;
 }
 
-async function publishPostSnapshot(snapshot) {
-  const form = new FormData();
-  form.append("body", snapshot.text);
-  if (snapshot.link) {
-    form.append(
-      "linkPreview",
-      JSON.stringify({
+function createIdempotencyKey() {
+  if (window.crypto?.randomUUID) return `post:${window.crypto.randomUUID()}`;
+  return `post:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+}
+
+function getStoredPendingPostIntentIds() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PENDING_POST_UPLOAD_INTENTS_KEY) || "[]");
+    return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function storePendingPostIntentIds(ids) {
+  try {
+    localStorage.setItem(PENDING_POST_UPLOAD_INTENTS_KEY, JSON.stringify([...new Set(ids)]));
+  } catch {
+    // The publish flow still works without localStorage; only reload recovery is skipped.
+  }
+}
+
+function rememberPendingPostIntent(intentId) {
+  if (!intentId) return;
+  storePendingPostIntentIds([...getStoredPendingPostIntentIds(), intentId]);
+}
+
+function forgetPendingPostIntent(intentId) {
+  if (!intentId) return;
+  storePendingPostIntentIds(getStoredPendingPostIntentIds().filter((storedId) => storedId !== intentId));
+}
+
+async function createPostUploadIntent(snapshot) {
+  const linkPreview = snapshot.link
+    ? {
         originalUrl: snapshot.externalUrl,
         url: snapshot.link.url,
         domain: getDomain(snapshot.link.url),
@@ -1337,21 +1367,97 @@ async function publishPostSnapshot(snapshot) {
         title: snapshot.link.title,
         desc: snapshot.link.desc,
         image: snapshot.link.image,
-      })
-    );
-  }
-  snapshot.mediaFiles.forEach((file) => form.append("file", file));
+      }
+    : null;
 
-  const response = await fetch(`${MEDIA_UPLOAD_ENDPOINT}/posts/create`, {
+  const response = await fetch(`${MEDIA_UPLOAD_ENDPOINT}/posts/upload-intent`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await getAccessToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      body: snapshot.text,
+      linkPreview,
+      idempotencyKey: snapshot.idempotencyKey,
+      files: snapshot.mediaFiles.map((file) => ({
+        name: file.name || "image",
+        contentType: getImageContentType(file),
+        sizeBytes: file.size,
+      })),
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Could not create upload intent.");
+  return payload;
+}
+
+async function uploadPostIntentFiles(intent, files) {
+  const targets = Array.isArray(intent.uploadTargets) ? intent.uploadTargets : [];
+  for (const target of targets) {
+    const file = files[target.index];
+    if (!file) throw new Error("Upload intent references a missing image.");
+
+    const headers = { ...(target.headers || {}) };
+    if (target.requiresAuth) headers.Authorization = `Bearer ${await getAccessToken()}`;
+
+    const response = await fetch(target.url, {
+      method: target.method || "PUT",
+      headers,
+      body: file,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Image upload failed.");
+  }
+}
+
+async function finalizePostUploadIntent(intentId) {
+  const response = await fetch(`${MEDIA_UPLOAD_ENDPOINT}/posts/upload-intents/${intentId}/finalize`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${await getAccessToken()}`,
     },
-    body: form,
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Post publish failed.");
+  if (!response.ok) throw new Error(payload.error || "Post finalize failed.");
   return payload;
+}
+
+async function cleanupPostUploadIntents() {
+  if (!currentProfile) return;
+  await fetch(`${MEDIA_UPLOAD_ENDPOINT}/posts/upload-intents/cleanup`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await getAccessToken()}`,
+    },
+  }).catch(() => null);
+}
+
+async function resumePendingPostUploads() {
+  if (!currentProfile) return;
+  await cleanupPostUploadIntents();
+  const pendingIds = getStoredPendingPostIntentIds();
+  if (!pendingIds.length) return;
+
+  for (const intentId of pendingIds) {
+    try {
+      await finalizePostUploadIntent(intentId);
+      forgetPendingPostIntent(intentId);
+    } catch {
+      // Keep the id: the files may still be uploading, or the intent may expire and be cleaned later.
+    }
+  }
+}
+
+async function publishPostSnapshot(snapshot) {
+  const intent = await createPostUploadIntent(snapshot);
+  if (intent.status === "finalized") return intent;
+
+  rememberPendingPostIntent(intent.intentId);
+  await uploadPostIntentFiles(intent, snapshot.mediaFiles);
+  const finalized = await finalizePostUploadIntent(intent.intentId);
+  forgetPendingPostIntent(intent.intentId);
+  return finalized;
 }
 
 async function createPost() {
@@ -1361,7 +1467,8 @@ async function createPost() {
     text: textInput.value.trim(),
     externalUrl: externalUrlInput.value.trim(),
     link: null,
-    mediaFiles: selectedPostMediaFiles.map((item) => item.file),
+    idempotencyKey: createIdempotencyKey(),
+    mediaFiles: selectedPostMediaFiles.map((item) => normalizeImageFile(item.file)),
   };
   snapshot.link = makeLinkPreview(snapshot.externalUrl);
 
