@@ -1323,101 +1323,64 @@ async function createReadyMediaAsset(purpose, uploadedItem) {
   return data;
 }
 
-async function insertPostMediaRows(postId, mediaAssets) {
-  if (!mediaAssets.length) return;
-  const { error } = await supabaseClient.from("post_media").insert(
-    mediaAssets.map((item, index) => ({
-      post_id: postId,
-      media_id: item.id,
-      position: index,
-    }))
-  );
-  if (error) throw new Error(error.message);
-}
+async function publishPostSnapshot(snapshot) {
+  const form = new FormData();
+  form.append("body", snapshot.text);
+  if (snapshot.link) {
+    form.append(
+      "linkPreview",
+      JSON.stringify({
+        originalUrl: snapshot.externalUrl,
+        url: snapshot.link.url,
+        domain: getDomain(snapshot.link.url),
+        site: snapshot.link.site,
+        title: snapshot.link.title,
+        desc: snapshot.link.desc,
+        image: snapshot.link.image,
+      })
+    );
+  }
+  snapshot.mediaFiles.forEach((file) => form.append("file", file));
 
-async function cleanupUploadedMedia(uploadedItems) {
-  await Promise.allSettled(uploadedItems.map((item) => deleteMediaObjectKey(item.key)));
+  const response = await fetch(`${MEDIA_UPLOAD_ENDPOINT}/posts/create`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await getAccessToken()}`,
+    },
+    body: form,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Post publish failed.");
+  return payload;
 }
 
 async function createPost() {
   if (!requireProfile()) return;
   if (isPublishingPost) return;
-  const text = textInput.value.trim();
-  const externalUrl = externalUrlInput.value.trim();
-  const link = makeLinkPreview(externalUrl);
-  const mediaFiles = selectedPostMediaFiles.map((item) => item.file);
+  const snapshot = {
+    text: textInput.value.trim(),
+    externalUrl: externalUrlInput.value.trim(),
+    link: null,
+    mediaFiles: selectedPostMediaFiles.map((item) => item.file),
+  };
+  snapshot.link = makeLinkPreview(snapshot.externalUrl);
 
-  if (!text) return;
-  if (mediaFiles.length > MAX_MEDIA_FILES_PER_POST) {
+  if (!snapshot.text) return;
+  if (snapshot.mediaFiles.length > MAX_MEDIA_FILES_PER_POST) {
     setStatus(`Attach up to ${MAX_MEDIA_FILES_PER_POST} images.`);
     return;
   }
 
   isPublishingPost = true;
-  setStatus(mediaFiles.length ? "Uploading media..." : "Publishing...");
+  setStatus(snapshot.mediaFiles.length ? "Uploading media..." : "Publishing...");
   renderAll();
 
-  const shouldPublishAfterAssets = Boolean(link || mediaFiles.length);
-  const { data: post, error } = await supabaseClient
-    .from("posts")
-    .insert({
-      author_id: currentProfile.id,
-      body: text,
-      post_type: link ? "link_repost" : "build_note",
-      status: shouldPublishAfterAssets ? "hidden" : "published",
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    isPublishingPost = false;
-    setStatus(error.message);
-    renderAll();
-    return;
-  }
-
-  const uploadedMedia = [];
-  const mediaAssets = [];
   try {
-    if (link) {
-      const { error: linkError } = await supabaseClient.from("link_previews").insert({
-        post_id: post.id,
-        original_url: externalUrl,
-        normalized_url: link.url,
-        domain: getDomain(link.url),
-        site_name: link.site,
-        title: link.title,
-        description: link.desc,
-        image_url: link.image,
-        fetch_status: "fallback",
-        fetched_at: new Date().toISOString(),
-      });
-      if (linkError) throw new Error(linkError.message);
-    }
-
-    for (const file of mediaFiles) {
-      const uploaded = await uploadMediaFile("post", file, { postId: post.id });
-      uploadedMedia.push(uploaded);
-      mediaAssets.push(await createReadyMediaAsset("post_image", uploaded));
-    }
-    await insertPostMediaRows(post.id, mediaAssets);
-    if (shouldPublishAfterAssets) {
-      const { error: publishError } = await supabaseClient
-        .from("posts")
-        .update({ status: "published" })
-        .eq("id", post.id)
-        .eq("author_id", currentProfile.id);
-      if (publishError) throw new Error(publishError.message);
-    }
+    await publishPostSnapshot(snapshot);
     setStatus("");
-  } catch (uploadError) {
-    await cleanupUploadedMedia(uploadedMedia);
-    await supabaseClient
-      .from("posts")
-      .update({ status: "deleted", deleted_at: new Date().toISOString() })
-      .eq("id", post.id);
+  } catch (publishError) {
     isPublishingPost = false;
-    setStatus(uploadError.message);
+    setStatus(publishError.message);
     renderAll();
     return;
   }
