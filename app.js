@@ -25,9 +25,16 @@ let knownProfiles = new Map();
 let currentSession = null;
 let currentProfile = null;
 let followingIds = new Set();
-let activeView = "feed";
 let activeFilter = "latest";
+let activeLeftPanel = "";
+let rightProfileMode = "mini";
+let selectedProfileId = "";
+let searchQuery = "";
 let selectedPostMediaFiles = [];
+let selectedPostMediaIndexById = new Map();
+let profilePostsCache = new Map();
+let loadingProfilePostIds = new Set();
+let pendingDeletePostId = "";
 let imageReadToken = 0;
 let lastScrollY = window.scrollY;
 let lastSearchScrollY = window.scrollY;
@@ -36,14 +43,15 @@ let animatedReactionPostId = null;
 let activeReplyTarget = null;
 let activeProfilePopover = null;
 let activeProfilePopoverPosition = null;
-let activeProfileHandle = "";
-let feedProfileHandle = null;
 let isLoading = true;
 let isPublishingPost = false;
 const openCommentPostIds = new Set();
 const pendingReactionPostIds = new Set();
+const SKIP_GOOGLE_AVATAR_NUDGE_KEY = "builder-story-skip-google-avatar-nudge";
 
 const postList = document.querySelector("#post-list");
+const postTemplate = document.querySelector("#post-template");
+const appShell = document.querySelector(".app-shell");
 const feedProfileView = document.querySelector("#feed-profile-view");
 const profilePostList = document.querySelector("#profile-post-list");
 const profileCard = document.querySelector(".profile-card");
@@ -51,6 +59,7 @@ const profileAvatar = document.querySelector(".profile-avatar");
 const profileTitle = document.querySelector("#profile-title");
 const profileBio = document.querySelector(".profile-card p");
 const profileStats = document.querySelector(".profile-stats");
+const profileActions = document.querySelector("[data-profile-actions]");
 const composer = document.querySelector("#composer");
 const textInput = document.querySelector("#post-text");
 const imageUrlInput = document.querySelector("#image-url");
@@ -73,11 +82,24 @@ const themeToggle = document.querySelector("[data-theme-toggle]");
 const newPostButton = document.querySelector("[data-new-post]");
 const settingsButton = document.querySelector("[data-settings-button]");
 const topSearch = document.querySelector(".top-search");
+const globalSearch = document.querySelector("#global-search");
 const authPrompt = document.querySelector("[data-auth-prompt]");
 const authPromptCopy = document.querySelector("[data-auth-prompt-copy]");
 const authPromptClose = document.querySelector("[data-auth-prompt-close]");
 const authPromptSignin = document.querySelector("[data-auth-prompt-signin]");
 const profilePopoverLayer = document.querySelector("[data-profile-popover-layer]");
+const toolbarAvatar = document.querySelector("[data-toolbar-avatar]");
+const leftPanel = document.querySelector("[data-left-panel]");
+const leftPanelTitle = document.querySelector("[data-left-panel-title]");
+const leftPanelBody = document.querySelector("[data-left-panel-body]");
+const leftPanelClose = document.querySelector("[data-left-panel-close]");
+const profileExpandButton = document.querySelector("[data-profile-expand]");
+const profileResetButton = document.querySelector("[data-profile-reset]");
+const composerAccount = document.querySelector("[data-composer-account]");
+const avatarNudge = document.querySelector("[data-avatar-nudge]");
+const confirmModal = document.querySelector("[data-confirm-modal]");
+const confirmCancel = document.querySelector("[data-confirm-cancel]");
+const confirmDelete = document.querySelector("[data-confirm-delete]");
 const MOBILE_MENU_HIDE_DISTANCE = 220;
 
 function setStatus(message) {
@@ -117,47 +139,25 @@ function showAuthPrompt(copy) {
   if (!authPrompt) return;
   if (authPromptCopy && copy) authPromptCopy.textContent = copy;
   authPrompt.hidden = false;
+  document.body.classList.add("has-auth-dialog");
   authPromptSignin?.focus();
 }
 
 function closeAuthPrompt() {
   if (authPrompt) authPrompt.hidden = true;
+  document.body.classList.remove("has-auth-dialog");
 }
 
 function getProfileRouteHandle() {
-  const params = new URLSearchParams(window.location.search);
-  const handle = params.get("handle");
-  return handle ? `@${normalizeUsername(handle)}` : "";
+  return "";
 }
 
-function writeRouteForView(viewName, mode = "push") {
-  const url = new URL(window.location.href);
-  if (viewName === "profile") {
-    url.searchParams.set("view", "profile");
-    const handle = activeProfileHandle || (currentProfile ? `@${currentProfile.username}` : "");
-    if (handle) url.searchParams.set("handle", handle.replace(/^@/, ""));
-  } else {
-    url.searchParams.delete("view");
-    url.searchParams.delete("handle");
-  }
-
-  const next = `${url.pathname}${url.search}${url.hash}`;
-  if (next === `${window.location.pathname}${window.location.search}${window.location.hash}`) return;
-  history[mode === "replace" ? "replaceState" : "pushState"]({ view: viewName }, "", next);
+function writeRouteForView() {
+  // Profile selection is intentionally local UI state in the new interface.
 }
 
 function applyRouteFromLocation() {
-  const params = new URLSearchParams(window.location.search);
-  const routeView = params.get("view");
-  if (routeView === "profile") {
-    feedProfileHandle = null;
-    activeProfileHandle = getProfileRouteHandle() || activeProfileHandle || (currentProfile ? `@${currentProfile.username}` : "");
-    switchView("profile");
-    return;
-  }
-
-  feedProfileHandle = null;
-  switchView("feed");
+  // The new interface keeps profile selection in local UI state only.
 }
 
 function normalizeUsername(value) {
@@ -176,13 +176,15 @@ function profileToUser(profile) {
   const avatarMedia = Array.isArray(profile.avatar_media)
     ? profile.avatar_media[0]
     : profile.avatar_media;
+  const googleAvatar = profile.id === currentSession?.user?.id ? getGoogleAvatarUrl() : "";
   return {
     id: profile.id,
     name,
     username: profile.username,
     handle: `@${profile.username}`,
     avatar: name.slice(0, 1).toUpperCase(),
-    avatarUrl: avatarMedia?.cdn_url || avatarMedia?.public_url || "",
+    avatarUrl: avatarMedia?.cdn_url || avatarMedia?.public_url || googleAvatar || "",
+    googleAvatarUrl: googleAvatar,
     avatarObjectKey: avatarMedia?.object_key || "",
     avatarMediaId: profile.avatar_media_id || avatarMedia?.id || "",
     bio: profile.bio || profile.headline || "",
@@ -191,6 +193,35 @@ function profileToUser(profile) {
     followingCount: profile.following_count || 0,
     isFollowing: followingIds.has(profile.id),
   };
+}
+
+function getGoogleAvatarUrl() {
+  const metadata = currentSession?.user?.user_metadata || {};
+  return metadata.avatar_url || metadata.picture || "";
+}
+
+function getGoogleDisplayName() {
+  const metadata = currentSession?.user?.user_metadata || {};
+  return metadata.full_name || metadata.name || metadata.display_name || "";
+}
+
+function shouldShowGoogleAvatarNudge() {
+  if (!currentProfile || currentProfile.avatar_media_id || !getGoogleAvatarUrl()) return false;
+  try {
+    return localStorage.getItem(SKIP_GOOGLE_AVATAR_NUDGE_KEY) !== currentProfile.id;
+  } catch {
+    return true;
+  }
+}
+
+function skipGoogleAvatarNudge() {
+  if (!currentProfile) return;
+  try {
+    localStorage.setItem(SKIP_GOOGLE_AVATAR_NUDGE_KEY, currentProfile.id);
+  } catch {
+    // Non-critical preference.
+  }
+  renderProfile();
 }
 
 function dbReactionToUi(value) {
@@ -379,7 +410,7 @@ async function ensureCurrentProfile() {
 
   if (data) {
     currentProfile = data;
-    activeProfileHandle ||= `@${data.username}`;
+    if (!selectedProfileId) selectedProfileId = data.id;
     return;
   }
 
@@ -392,7 +423,7 @@ async function ensureCurrentProfile() {
     .insert({
       id: currentSession.user.id,
       username: fallbackUsername,
-      display_name: currentSession.user.user_metadata?.display_name || fallbackUsername,
+      display_name: getGoogleDisplayName() || fallbackUsername,
     })
     .select("*")
     .single();
@@ -403,7 +434,7 @@ async function ensureCurrentProfile() {
   }
 
   currentProfile = created;
-  activeProfileHandle = `@${created.username}`;
+  selectedProfileId = created.id;
 }
 
 async function loadAppData({ showLoading = true } = {}) {
@@ -461,6 +492,7 @@ async function loadProfiles() {
 async function loadPosts() {
   if (activeFilter === "following" && !currentProfile) {
     posts = [];
+    selectedPostMediaIndexById = new Map();
     return;
   }
 
@@ -484,6 +516,43 @@ async function loadPosts() {
   ]);
 
   posts = (rows || []).map((row) => mapPostRow(row, comments.get(row.id) || [], reactions.get(row.id)));
+  selectedPostMediaIndexById = new Map();
+}
+
+async function loadProfilePosts(profileId, { force = false } = {}) {
+  if (!profileId || !supabaseClient) return [];
+  if (!force && profilePostsCache.has(profileId)) return profilePostsCache.get(profileId);
+  if (loadingProfilePostIds.has(profileId)) return profilePostsCache.get(profileId) || [];
+
+  loadingProfilePostIds.add(profileId);
+  const { data: rows, error } = await supabaseClient
+    .from("profile_posts")
+    .select("*")
+    .eq("author_id", profileId)
+    .order("created_at", { ascending: false })
+    .limit(60);
+
+  if (error) {
+    setStatus(error.message);
+    loadingProfilePostIds.delete(profileId);
+    return profilePostsCache.get(profileId) || [];
+  }
+
+  const postIds = (rows || []).map((row) => row.id);
+  const [comments, reactions] = await Promise.all([
+    fetchComments(postIds),
+    fetchReactions(postIds),
+  ]);
+  const mapped = (rows || []).map((row) => mapPostRow(row, comments.get(row.id) || [], reactions.get(row.id)));
+  profilePostsCache.set(profileId, mapped);
+  loadingProfilePostIds.delete(profileId);
+  return mapped;
+}
+
+function ensureProfilePosts(profileId, { force = false } = {}) {
+  if (!profileId || rightProfileMode !== "expanded") return;
+  if (!force && (profilePostsCache.has(profileId) || loadingProfilePostIds.has(profileId))) return;
+  loadProfilePosts(profileId, { force }).then(() => renderProfile());
 }
 
 async function fetchComments(postIds) {
@@ -648,31 +717,60 @@ function restoreReaction(post, snapshot) {
 
 function updateAuthUi() {
   const signedIn = Boolean(currentProfile);
-  authSignedOut.hidden = signedIn;
-  authSignedIn.hidden = !signedIn;
-  composer.hidden = !signedIn || activeProfileHandle !== `@${currentProfile?.username}`;
+  composer.hidden = false;
+
+  const ownUser = currentProfile
+    ? getKnownUserByHandle(`@${currentProfile.username}`) || profileToUser(currentProfile)
+    : null;
+  if (toolbarAvatar) toolbarAvatar.innerHTML = ownUser ? renderAvatarVisual(ownUser) : "B";
+  if (composerAccount) {
+    if (ownUser) {
+      composerAccount.textContent = `Publishing as ${ownUser.name} ${ownUser.handle}`;
+    } else {
+      composerAccount.innerHTML = `
+        <span>Sign in to publish a build note.</span>
+        <button class="profile-link" type="button" data-composer-signin>Continue with Google</button>
+      `;
+      composerAccount.querySelector("[data-composer-signin]")?.addEventListener("click", signInWithGoogle);
+    }
+  }
 
   if (!signedIn) return;
   closeAuthPrompt();
+}
 
-  const user = getKnownUserByHandle(`@${currentProfile.username}`) || profileToUser(currentProfile);
-  authName.textContent = user.name;
-  authHandle.textContent = user.handle;
-  authAvatar.innerHTML = renderAvatarVisual(user);
+function hasComposerDraft() {
+  return Boolean(
+    textInput?.value.trim() ||
+      externalUrlInput?.value.trim() ||
+      selectedPostMediaFiles.length ||
+      !composerPreview?.hidden
+  );
+}
+
+function setComposerCollapsed(shouldCollapse) {
+  if (!composer) return;
+  composer.classList.toggle("is-collapsed", Boolean(shouldCollapse));
+}
+
+function expandComposer() {
+  setComposerCollapsed(false);
+}
+
+function syncComposerCollapsed() {
+  if (!composer) return;
+  const containsFocus = composer.contains(document.activeElement);
+  setComposerCollapsed(!containsFocus && !hasComposerDraft() && !isPublishingPost);
 }
 
 function renderAll() {
   renderFeed();
   renderProfile();
   updateAuthUi();
+  syncComposerCollapsed();
 }
 
 function renderFeed() {
-  if (feedProfileHandle) {
-    renderFeedProfile();
-    return;
-  }
-
   postList.hidden = false;
   feedProfileView.hidden = true;
   feedProfileView.innerHTML = "";
@@ -704,57 +802,12 @@ function renderAuthInvite(container, copy) {
   container.append(invite);
 }
 
-function renderFeedProfile() {
-  const user = getKnownUserByHandle(feedProfileHandle);
-  if (!user) {
-    feedProfileHandle = null;
-    renderFeed();
-    return;
-  }
-
-  const profilePosts = posts.filter(
-    (post) => `@${post.author.username}`.toLowerCase() === user.handle.toLowerCase()
-  );
-  const isOwnProfile = currentProfile?.id === user.id;
-  postList.hidden = true;
-  feedProfileView.hidden = false;
-  feedProfileView.innerHTML = `
-    <header class="profile-card feed-profile-card is-readonly">
-      <button class="profile-back-button" type="button" data-feed-profile-back aria-label="Back to feed">
-        ${backArrowSvg()}
-        <span>Back</span>
-      </button>
-      <div class="profile-topline">
-        <div class="profile-avatar">${renderAvatarVisual(user)}</div>
-        ${renderFollowButton(user, isOwnProfile)}
-      </div>
-      <h1>${escapeHtml(user.name)}</h1>
-      <p>${escapeHtml(getProfileSummary(user))}</p>
-      <div class="profile-stats">
-        <span><strong>${user.postCount}</strong> posts</span>
-        <span><strong>${user.followersCount}</strong> followers</span>
-        <span><strong>${user.followingCount}</strong> following</span>
-      </div>
-    </header>
-    <div class="post-list" data-feed-profile-posts></div>
-  `;
-  feedProfileView
-    .querySelector("[data-feed-profile-back]")
-    .addEventListener("click", closeFeedProfile);
-  feedProfileView
-    .querySelector("[data-follow-profile]")
-    ?.addEventListener("click", () => toggleFollow(user.id));
-  renderPostList(feedProfileView.querySelector("[data-feed-profile-posts]"), profilePosts);
-}
-
 function renderProfile() {
-  const fallbackHandle = currentProfile ? `@${currentProfile.username}` : "";
-  if (!activeProfileHandle && fallbackHandle) activeProfileHandle = fallbackHandle;
-  const user = getKnownUserByHandle(activeProfileHandle) || profileToUser(currentProfile);
+  if (!selectedProfileId && currentProfile) selectedProfileId = currentProfile.id;
+  const user = getKnownUserById(selectedProfileId) || profileToUser(currentProfile);
   const isOwnProfile = user && currentProfile?.id === user.id;
-  const profilePosts = user
-    ? posts.filter((post) => `@${post.author.username}`.toLowerCase() === user.handle.toLowerCase())
-    : [];
+  const profilePosts = user ? profilePostsCache.get(user.id) || [] : [];
+  appShell?.classList.toggle("has-expanded-profile", rightProfileMode === "expanded");
 
   if (!user) {
     profileAvatar.textContent = "B";
@@ -765,11 +818,28 @@ function renderProfile() {
     profileTitle.textContent = "Sign in";
     profileBio.textContent = "Create an account to publish build notes and keep a profile.";
     profileStats.innerHTML = `<span><strong>0</strong> posts</span>`;
-    composer.hidden = true;
-    renderPostList(profilePostList, [], { emptyText: "Sign in to start your Builder Story profile." });
+    if (profileActions) {
+      profileActions.innerHTML = `<button class="profile-link" type="button" data-profile-signin>Continue with Google</button>`;
+      profileActions.querySelector("[data-profile-signin]")?.addEventListener("click", signInWithGoogle);
+    }
+    profileResetButton.hidden = true;
+    profileExpandButton.textContent = "+";
+    profileCard.classList.toggle("is-expanded", rightProfileMode === "expanded");
+    avatarNudge.hidden = true;
+    composer.classList.toggle("is-publishing", false);
+    composer.querySelectorAll("textarea, input, .add-media-button, .send-button").forEach((control) => {
+      control.disabled = true;
+    });
+    if (authPromptSignin) authPromptSignin.disabled = false;
+    if (rightProfileMode === "expanded") {
+      renderAuthInvite(profilePostList, "Sign in to start your Builder Story profile.");
+    } else {
+      renderPostList(profilePostList, [], { emptyText: "Sign in to start your Builder Story profile." });
+    }
     return;
   }
 
+  ensureProfilePosts(user.id);
   profileAvatar.innerHTML = renderAvatarVisual(user);
   profileAvatar.classList.toggle("is-editable", isOwnProfile);
   if (isOwnProfile) {
@@ -784,18 +854,36 @@ function renderProfile() {
   profileTitle.textContent = user.name;
   profileBio.textContent = getProfileSummary(user);
   profileCard.classList.toggle("is-readonly", !isOwnProfile);
-  composer.hidden = !isOwnProfile;
+  profileCard.classList.toggle("is-expanded", rightProfileMode === "expanded");
+  profileResetButton.hidden = isOwnProfile || !currentProfile;
+  profileExpandButton.textContent = rightProfileMode === "expanded" ? "-" : "+";
   composer.classList.toggle("is-publishing", isPublishingPost);
-  composer.querySelectorAll("textarea, input, button").forEach((control) => {
-    control.disabled = isPublishingPost;
+  composer.querySelectorAll("textarea, input, .add-media-button, .send-button").forEach((control) => {
+    control.disabled = !currentProfile || isPublishingPost;
   });
+  if (authPromptSignin) authPromptSignin.disabled = false;
   profileStats.innerHTML = `
     <span><strong>${user.postCount}</strong> posts</span>
     <span><strong>${user.followersCount}</strong> followers</span>
     <span><strong>${user.followingCount}</strong> following</span>
   `;
+  if (profileActions) {
+    profileActions.innerHTML = renderFollowButton(user, isOwnProfile);
+    profileActions.querySelector("[data-follow-profile]")?.addEventListener("click", () => {
+      toggleFollow(user.id);
+    });
+  }
 
-  renderPostList(profilePostList, profilePosts);
+  renderAvatarNudge(isOwnProfile);
+  if (rightProfileMode === "expanded") {
+    if (loadingProfilePostIds.has(user.id) && !profilePosts.length) {
+      renderPostList(profilePostList, [], { emptyText: "Loading profile posts..." });
+    } else {
+      renderPostList(profilePostList, profilePosts, { emptyText: "No posts on this profile yet." });
+    }
+  } else {
+    profilePostList.innerHTML = "";
+  }
 }
 
 function renderPostList(container, list, options = {}) {
@@ -823,9 +911,78 @@ function renderPostList(container, list, options = {}) {
     .forEach((post) => container.append(renderPost(post)));
 }
 
+function getPostsById(postId) {
+  const matches = [];
+  const seen = new Set();
+  const collect = (post) => {
+    if (!post || post.id !== postId || seen.has(post)) return;
+    seen.add(post);
+    matches.push(post);
+  };
+
+  posts.forEach(collect);
+  profilePostsCache.forEach((list) => list.forEach(collect));
+  return matches;
+}
+
+function getPostById(postId) {
+  return getPostsById(postId)[0] || null;
+}
+
+function updatePostsById(postId, updater) {
+  getPostsById(postId).forEach(updater);
+}
+
+function refreshRenderedPost(postId) {
+  document.querySelectorAll(".post-card").forEach((card) => {
+    if (card.dataset.id !== postId) return;
+    const post = getPostById(postId);
+    if (post) card.replaceWith(renderPost(post));
+  });
+}
+
+function copyReactionState(target, source) {
+  target.selectedReaction = source.selectedReaction;
+  target.reactions = { ...source.reactions };
+}
+
+function mirrorReactionState(postId, source) {
+  updatePostsById(postId, (post) => {
+    if (post !== source) copyReactionState(post, source);
+  });
+}
+
+function setPostComments(postId, comments) {
+  updatePostsById(postId, (post) => {
+    post.comments = comments.map((comment) => ({
+      ...comment,
+      replies: comment.replies.map((reply) => ({ ...reply })),
+    }));
+  });
+}
+
+async function refreshPostComments(postId) {
+  const comments = await fetchComments([postId]);
+  setPostComments(postId, comments.get(postId) || []);
+  refreshRenderedPost(postId);
+}
+
+function findPostContainingComment(commentId) {
+  const seen = new Set();
+  const allPosts = [];
+  const collect = (post) => {
+    if (!post || seen.has(post)) return;
+    seen.add(post);
+    allPosts.push(post);
+  };
+
+  posts.forEach(collect);
+  profilePostsCache.forEach((list) => list.forEach(collect));
+  return allPosts.find((post) => findCommentById(post.comments, commentId)) || null;
+}
+
 function renderPost(post) {
-  const template = document.querySelector("#post-template");
-  const node = template.content.firstElementChild.cloneNode(true);
+  const node = postTemplate.content.firstElementChild.cloneNode(true);
   node.dataset.id = post.id;
 
   const authorHandle = `@${post.author.username}`;
@@ -846,20 +1003,32 @@ function renderPost(post) {
   const image = node.querySelector(".post-image");
   const mediaGrid = node.querySelector(".post-media-grid");
   if ((post.images || []).length > 1) {
-    mediaGrid.className = `post-media-grid post-media-grid-${Math.min(post.images.length, 4)}`;
-    mediaGrid.innerHTML = post.images
-      .slice(0, MAX_MEDIA_FILES_PER_POST)
-      .map(
-        (item) => `
-          <img
-            src="${escapeHtml(item.url)}"
-            alt="Post attachment"
-            loading="lazy"
-            decoding="async"
-          />
-        `
-      )
-      .join("");
+    const media = post.images.slice(0, MAX_MEDIA_FILES_PER_POST);
+    const selectedIndex = Math.min(
+      media.length - 1,
+      Math.max(0, selectedPostMediaIndexById.get(post.id) || 0)
+    );
+    const active = media[selectedIndex];
+    mediaGrid.innerHTML = `
+      <img class="post-media-active" src="${escapeHtml(active.url)}" alt="Post attachment" loading="lazy" decoding="async" />
+      <div class="post-media-thumbs">
+        ${media
+          .map(
+            (item, index) => `
+              <button class="post-media-thumb ${index === selectedIndex ? "is-active" : ""}" type="button" data-media-index="${index}" aria-label="Show image ${index + 1}">
+                <img src="${escapeHtml(item.url)}" alt="" loading="lazy" decoding="async" />
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    `;
+    mediaGrid.querySelectorAll("[data-media-index]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectedPostMediaIndexById.set(post.id, Number(button.dataset.mediaIndex));
+        refreshRenderedPost(post.id);
+      });
+    });
     mediaGrid.hidden = false;
   } else if (isRenderableImageUrl(post.image)) {
     image.src = post.image;
@@ -902,7 +1071,7 @@ function renderPostMenu(node, post) {
   });
   menuButton.addEventListener("click", () => {
     if (isOwnPost) {
-      deletePost(post.id);
+      requestDeletePost(post.id);
     } else {
       reportPost(post.id);
     }
@@ -1015,6 +1184,64 @@ function getKnownUserByHandle(handle) {
   return null;
 }
 
+function getKnownUserById(profileId) {
+  if (!profileId) return null;
+  for (const user of knownProfiles.values()) {
+    if (user.id === profileId) return user;
+  }
+  if (currentProfile?.id === profileId) return profileToUser(currentProfile);
+  for (const post of posts) {
+    if (post.author.id === profileId) {
+      return getKnownUserByHandle(`@${post.author.username}`) || {
+        id: post.author.id,
+        name: post.author.name,
+        username: post.author.username,
+        handle: `@${post.author.username}`,
+        avatar: post.author.avatar,
+        avatarUrl: post.author.avatarUrl || "",
+        postCount: posts.filter((item) => item.author.id === post.author.id).length,
+        followersCount: 0,
+        followingCount: 0,
+        isFollowing: followingIds.has(post.author.id),
+      };
+    }
+  }
+  return null;
+}
+
+function selectProfileByHandle(handle) {
+  const user = getKnownUserByHandle(handle);
+  if (!user) return;
+  selectedProfileId = user.id;
+  if (rightProfileMode === "expanded") ensureProfilePosts(user.id);
+  renderAll();
+}
+
+function resetSelectedProfile() {
+  selectedProfileId = currentProfile?.id || "";
+  renderAll();
+}
+
+function renderAvatarNudge(isOwnProfile) {
+  if (!avatarNudge) return;
+  if (!isOwnProfile || !shouldShowGoogleAvatarNudge()) {
+    avatarNudge.hidden = true;
+    avatarNudge.innerHTML = "";
+    return;
+  }
+
+  avatarNudge.hidden = false;
+  avatarNudge.innerHTML = `
+    <p>Use your Google avatar or upload a custom one.</p>
+    <div class="avatar-nudge-actions">
+      <button type="button" data-avatar-upload>Upload</button>
+      <button type="button" data-avatar-skip>Skip</button>
+    </div>
+  `;
+  avatarNudge.querySelector("[data-avatar-upload]").addEventListener("click", () => avatarFileInput?.click());
+  avatarNudge.querySelector("[data-avatar-skip]").addEventListener("click", skipGoogleAvatarNudge);
+}
+
 function renderUserMention(handle) {
   const user = getKnownUserByHandle(handle);
   if (!user) return escapeHtml(handle);
@@ -1083,14 +1310,14 @@ function renderFeaturedComment(post) {
   preview.addEventListener("click", (event) => {
     if (event.target.closest(".comment-like, .user-mention, .profile-trigger")) return;
     openCommentPostIds.add(post.id);
-    renderAll();
+    refreshRenderedPost(post.id);
   });
   preview.addEventListener("keydown", (event) => {
     if (event.target !== preview) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     openCommentPostIds.add(post.id);
-    renderAll();
+    refreshRenderedPost(post.id);
   });
   preview.querySelector(".comment-like").addEventListener("click", (event) => {
     event.stopPropagation();
@@ -1177,7 +1404,7 @@ function renderCommentThread(post, comment) {
   thread.querySelector(".comment-reply-button").addEventListener("click", () => {
     activeReplyTarget = { postId: post.id, commentId: comment.id };
     openCommentPostIds.add(post.id);
-    renderAll();
+    refreshRenderedPost(post.id);
   });
 
   const replies = document.createElement("div");
@@ -1223,7 +1450,7 @@ function renderReplyComment(post, parentComment, reply) {
   row.querySelector(".comment-reply-button").addEventListener("click", () => {
     activeReplyTarget = { postId: post.id, commentId: parentComment.id, mention: reply.handle };
     openCommentPostIds.add(post.id);
-    renderAll();
+    refreshRenderedPost(post.id);
   });
   return row;
 }
@@ -1497,17 +1724,29 @@ async function createPost() {
   clearImagePreview();
   composerPreview.hidden = true;
   composerPreview.innerHTML = "";
+  syncComposerCollapsed();
+  if (currentProfile) profilePostsCache.delete(currentProfile.id);
   await loadAppData({ showLoading: false });
+}
+
+function requestDeletePost(postId) {
+  if (!requireProfile()) return;
+  pendingDeletePostId = postId;
+  if (confirmModal) confirmModal.hidden = false;
+}
+
+function closeDeleteConfirm() {
+  pendingDeletePostId = "";
+  if (confirmModal) confirmModal.hidden = true;
 }
 
 async function deletePost(postId) {
   if (!requireProfile()) return;
-  const confirmed = confirm("Delete this post?");
-  if (!confirmed) return;
 
   const previousPosts = posts;
   const postToDelete = posts.find((post) => post.id === postId);
   posts = posts.filter((post) => post.id !== postId);
+  if (currentProfile) profilePostsCache.delete(currentProfile.id);
   renderAll();
 
   const { data: mediaRows, error: mediaError } = await supabaseClient
@@ -1557,17 +1796,7 @@ async function deletePost(postId) {
 
 async function reportPost(postId) {
   if (!requireProfile()) return;
-  const reason = prompt("Why are you reporting this post?", "Spam or unsafe content");
-  if (!reason?.trim()) return;
-
-  const { error } = await supabaseClient.from("reports").insert({
-    reporter_id: currentProfile.id,
-    target_type: "post",
-    post_id: postId,
-    reason: reason.trim(),
-  });
-
-  setStatus(error ? error.message : "Report submitted.");
+  setStatus("Reports are not part of this interface yet.");
 }
 
 async function toggleReaction(postId, type) {
@@ -1575,7 +1804,7 @@ async function toggleReaction(postId, type) {
   const profileId = currentProfile.id;
   if (pendingReactionPostIds.has(postId)) return;
 
-  const post = posts.find((item) => item.id === postId);
+  const post = getPostById(postId);
   if (!post) return;
 
   const snapshot = {
@@ -1587,8 +1816,9 @@ async function toggleReaction(postId, type) {
   let error;
 
   applyOptimisticReaction(post, type);
+  mirrorReactionState(postId, post);
   animatedReactionPostId = postId;
-  renderAll();
+  refreshRenderedPost(postId);
 
   try {
     if (snapshot.selectedReaction === type) {
@@ -1610,17 +1840,18 @@ async function toggleReaction(postId, type) {
 
     if (error) {
       restoreReaction(post, snapshot);
+      mirrorReactionState(postId, post);
       setStatus(error.message);
-      renderAll();
+      refreshRenderedPost(postId);
       return;
     }
 
     pendingReactionPostIds.delete(postId);
-    await loadAppData({ showLoading: false });
+    refreshRenderedPost(postId);
   } finally {
     animatedReactionPostId = null;
     pendingReactionPostIds.delete(postId);
-    renderAll();
+    refreshRenderedPost(postId);
   }
 }
 
@@ -1642,12 +1873,13 @@ async function addComment(postId, text, parentCommentId = null) {
 
   activeReplyTarget = null;
   openCommentPostIds.add(postId);
-  await loadAppData({ showLoading: false });
+  await refreshPostComments(postId);
 }
 
 async function toggleCommentLike(commentId, shouldOpenComments = true) {
   if (!requireProfile()) return;
-  const comment = findCommentById(posts.flatMap((post) => post.comments), commentId);
+  const post = findPostContainingComment(commentId);
+  const comment = post ? findCommentById(post.comments, commentId) : null;
   if (!comment) return;
 
   const query = supabaseClient
@@ -1669,10 +1901,9 @@ async function toggleCommentLike(commentId, shouldOpenComments = true) {
   }
 
   if (shouldOpenComments) {
-    const post = posts.find((item) => findCommentById(item.comments, commentId));
     if (post) openCommentPostIds.add(post.id);
   }
-  await loadAppData({ showLoading: false });
+  await refreshPostComments(post.id);
 }
 
 function findCommentById(comments, commentId) {
@@ -1783,40 +2014,7 @@ function renderFollowButton(user, isOwnProfile) {
 }
 
 function openProfilePopover(handle, anchor) {
-  const user = getKnownUserByHandle(handle);
-  if (!user || !profilePopoverLayer) return;
-
-  closeProfilePopover();
-
-  const popover = document.createElement("aside");
-  popover.className = "profile-popover";
-  popover.setAttribute("role", "dialog");
-  popover.setAttribute("aria-label", `Mini profile for ${user.name}`);
-  popover.innerHTML = `
-    <div class="profile-popover-art"></div>
-    <div class="profile-popover-main">
-      <button class="profile-popover-avatar" type="button" data-open-profile="${escapeHtml(user.handle)}" aria-label="Open ${escapeHtml(user.name)} profile">${renderAvatarVisual(user)}</button>
-      <div class="profile-popover-copy">
-        <button class="profile-popover-name" type="button" data-open-profile="${escapeHtml(user.handle)}">${escapeHtml(user.name)}</button>
-        <span>${escapeHtml(user.handle)}</span>
-      </div>
-    </div>
-    <p>${escapeHtml(getProfileSummary(user))}</p>
-    <div class="profile-popover-stats">
-      <span><strong>${user.postCount}</strong> posts</span>
-      <span><strong>${user.followersCount}</strong> followers</span>
-    </div>
-  `;
-
-  profilePopoverLayer.append(popover);
-  activeProfilePopover = popover;
-  popover.querySelectorAll("[data-open-profile]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      openUserProfile(button.dataset.openProfile);
-    });
-  });
-  positionProfilePopover(popover, anchor);
+  selectProfileByHandle(handle);
 }
 
 function closeProfilePopover() {
@@ -1826,23 +2024,7 @@ function closeProfilePopover() {
 }
 
 function positionProfilePopover(popover, anchor) {
-  const rect = anchor.getBoundingClientRect();
-  const margin = 12;
-  const width = popover.offsetWidth;
-  const height = popover.offsetHeight;
-  const left = Math.min(
-    window.innerWidth - width - margin,
-    Math.max(margin, rect.left + rect.width / 2 - width / 2)
-  );
-  const preferredTop = rect.bottom + 8;
-  const top =
-    preferredTop + height + margin > window.innerHeight
-      ? Math.max(margin, rect.top - height - 8)
-      : preferredTop;
-
-  popover.style.left = `${left}px`;
-  popover.style.top = `${top}px`;
-  activeProfilePopoverPosition = { left, top };
+  activeProfilePopoverPosition = null;
 }
 
 function lockProfilePopoverPosition() {
@@ -1859,19 +2041,11 @@ function getProfileSummary(user) {
 }
 
 function openUserProfile(handle) {
-  const user = getKnownUserByHandle(handle);
-  if (!user) return;
-
-  activeProfileHandle = user.handle;
-  feedProfileHandle = null;
-  closeProfilePopover();
+  selectProfileByHandle(handle);
   closeMobileMenu();
-  switchView("profile", { push: true });
-  renderAll();
 }
 
 function closeFeedProfile() {
-  feedProfileHandle = null;
   renderFeed();
 }
 
@@ -1927,74 +2101,81 @@ function closePostMenus() {
   });
 }
 
+function openLeftPanel(panelName) {
+  if (!leftPanel || !leftPanelTitle || !leftPanelBody) return;
+  if (rightProfileMode === "expanded") {
+    rightProfileMode = "mini";
+    renderProfile();
+  }
+  activeLeftPanel = activeLeftPanel === panelName ? "" : panelName;
+  if (!activeLeftPanel) {
+    closeLeftPanel();
+    return;
+  }
+
+  const content = getLeftPanelContent(activeLeftPanel);
+  leftPanelTitle.textContent = content.title;
+  leftPanelBody.innerHTML = content.body;
+  leftPanelBody.querySelector("[data-panel-signin]")?.addEventListener("click", signInWithGoogle);
+  leftPanel.hidden = false;
+  document.querySelectorAll("[data-left-panel-button]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.leftPanelButton === activeLeftPanel);
+  });
+}
+
+function closeLeftPanel() {
+  activeLeftPanel = "";
+  if (leftPanel) leftPanel.hidden = true;
+  document.querySelectorAll("[data-left-panel-button]").forEach((button) => {
+    button.classList.remove("is-active");
+  });
+}
+
+function getLeftPanelContent(panelName) {
+  if (panelName === "groups") {
+    return {
+      title: "Groups",
+      body: "<p>Group spaces are reserved for the next backend pass. The feed and profiles remain fully usable.</p>",
+    };
+  }
+  if (panelName === "messages") {
+    return {
+      title: "Messages",
+      body: "<p>Private messages are not wired yet. Profile selection and public comments stay in the main interface.</p>",
+    };
+  }
+  return {
+    title: "Settings",
+    body: currentProfile
+      ? `<p>Signed in as ${escapeHtml(currentProfile.display_name || currentProfile.username)}.</p><p>Avatar is edited from the profile card.</p>`
+      : '<p>Sign in with Google to create your Builder Story profile.</p><button class="profile-link" type="button" data-panel-signin>Continue with Google</button>',
+  };
+}
+
 function switchView(viewName, options = {}) {
-  activeView = viewName;
-  document
-    .querySelectorAll("[data-view]")
-    .forEach((item) => item.classList.toggle("is-active", item.dataset.view === viewName));
   document
     .querySelectorAll(".view")
-    .forEach((view) => view.classList.toggle("is-active", view.id === `${viewName}-view`));
-  if (options.push || options.replace) {
-    writeRouteForView(viewName, options.replace ? "replace" : "push");
-  }
+    .forEach((view) => view.classList.toggle("is-active", view.id === "feed-view"));
 }
 
 function closeMobileMenu() {
-  if (!mobileMenuButton) return;
-  rail.classList.remove("is-open");
-  mobileMenuButton.setAttribute("aria-expanded", "false");
+  // Kept as a compatibility no-op for old call sites.
 }
 
 function setMobileMenuVisibility(value) {
-  if (!mobileMenuButton) return;
   mobileMenuVisibility = Math.min(1, Math.max(0, value));
-  mobileMenuButton.style.setProperty(
-    "--mobile-menu-visibility",
-    mobileMenuVisibility.toFixed(3)
-  );
-  mobileMenuButton.classList.toggle("is-hidden-by-scroll", mobileMenuVisibility <= 0.04);
 }
 
 function handleMobileMenuScroll() {
-  const currentScrollY = Math.max(0, window.scrollY);
-  const delta = currentScrollY - lastScrollY;
-  lastScrollY = currentScrollY;
-
-  if (rail.classList.contains("is-open") || currentScrollY === 0) {
-    setMobileMenuVisibility(1);
-    return;
-  }
-
-  if (delta > 0) {
-    setMobileMenuVisibility(mobileMenuVisibility - delta / MOBILE_MENU_HIDE_DISTANCE);
-  } else if (delta < 0) {
-    setMobileMenuVisibility(1);
-  }
+  lastScrollY = Math.max(0, window.scrollY);
 }
 
 function handleSearchBarScroll() {
-  if (!topSearch) return;
-  const currentScrollY = Math.max(0, window.scrollY);
-  const delta = currentScrollY - lastSearchScrollY;
-  lastSearchScrollY = currentScrollY;
-
-  topSearch.classList.toggle("is-floating", currentScrollY > 24);
-  if (currentScrollY < 80 || delta < -8) {
-    topSearch.classList.remove("is-hidden");
-    return;
-  }
-
-  if (delta > 12) {
-    topSearch.classList.add("is-hidden");
-  }
+  lastSearchScrollY = Math.max(0, window.scrollY);
 }
 
 function toggleMobileMenu() {
-  if (!mobileMenuButton) return;
-  const isOpen = rail.classList.toggle("is-open");
-  mobileMenuButton.setAttribute("aria-expanded", String(isOpen));
-  if (isOpen) setMobileMenuVisibility(1);
+  // Mobile toolbar is always available in the new layout.
 }
 
 function renderSelectedMediaPreviews() {
@@ -2010,6 +2191,7 @@ function renderSelectedMediaPreviews() {
       `
     )
     .join("");
+  syncComposerCollapsed();
 }
 
 function clearImagePreview() {
@@ -2043,41 +2225,14 @@ async function signInWithGoogle() {
   }
 }
 
-document.querySelectorAll("[data-view]").forEach((button) => {
-  button.addEventListener("click", () => {
-    if (button.dataset.view === "feed") feedProfileHandle = null;
-    if (button.dataset.view === "profile" && !currentProfile) {
-      showAuthPrompt("Sign in to publish updates, save your profile, and keep a public build story.");
-      return;
-    }
-    if (button.dataset.view === "profile" && currentProfile) {
-      activeProfileHandle = `@${currentProfile.username}`;
-    }
-    switchView(button.dataset.view, { push: true });
-    renderAll();
-    closeMobileMenu();
-  });
-});
-
 themeToggle?.addEventListener("click", () => {
   setTheme(document.body.classList.contains("theme-dark") ? "light" : "dark");
 });
 
-newPostButton?.addEventListener("click", () => {
-  if (!currentProfile) {
-    showAuthPrompt("Sign in to post what you shipped and get feedback from other builders.");
-    return;
-  }
-
-  activeProfileHandle = `@${currentProfile.username}`;
-  switchView("profile", { push: true });
-  renderAll();
-  closeMobileMenu();
-  requestAnimationFrame(() => textInput?.focus());
-});
-
-settingsButton?.addEventListener("click", () => {
-  showAuthPrompt("Settings are tied to your Builder Story profile. Sign in to manage them.");
+newPostButton?.addEventListener("click", () => textInput?.focus());
+settingsButton?.addEventListener("click", () => openLeftPanel("settings"));
+globalSearch?.addEventListener("input", () => {
+  searchQuery = globalSearch.value;
 });
 
 authPromptClose?.addEventListener("click", closeAuthPrompt);
@@ -2086,32 +2241,17 @@ authPrompt?.addEventListener("click", (event) => {
   if (event.target === authPrompt) closeAuthPrompt();
 });
 
-googleSigninButton.addEventListener("click", signInWithGoogle);
-authSignout.addEventListener("click", async () => {
+googleSigninButton?.addEventListener("click", signInWithGoogle);
+authSignout?.addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
 });
 
-mobileMenuButton.addEventListener("click", toggleMobileMenu);
-window.addEventListener("scroll", handleMobileMenuScroll, { passive: true });
-window.addEventListener("scroll", handleSearchBarScroll, { passive: true });
-window.addEventListener("scroll", lockProfilePopoverPosition, { passive: true });
-window.addEventListener("resize", lockProfilePopoverPosition, { passive: true });
-window.addEventListener(
-  "wheel",
-  (event) => {
-    if (event.deltaY < 0) topSearch?.classList.remove("is-hidden");
-  },
-  { passive: true }
-);
-window.addEventListener("popstate", () => {
-  applyRouteFromLocation();
-  renderAll();
-});
+mobileMenuButton?.addEventListener("click", toggleMobileMenu);
 
 document.querySelectorAll("[data-feed-filter]").forEach((button) => {
   button.addEventListener("click", async () => {
     activeFilter = button.dataset.feedFilter;
-    feedProfileHandle = null;
+    selectedPostMediaIndexById = new Map();
     document
       .querySelectorAll("[data-feed-filter]")
       .forEach((item) => item.classList.toggle("is-active", item === button));
@@ -2124,20 +2264,45 @@ document.addEventListener("click", (event) => {
   if (profileTrigger) {
     event.preventDefault();
     event.stopPropagation();
-    openProfilePopover(profileTrigger.dataset.userHandle, profileTrigger);
+    selectProfileByHandle(profileTrigger.dataset.userHandle);
     closePostMenus();
     return;
   }
-
-  if (event.target.closest(".profile-popover")) return;
-  closeProfilePopover();
 
   if (event.target.closest(".post-menu-wrap")) return;
   closePostMenus();
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeProfilePopover();
+  if (event.key !== "Escape") return;
+  closeDeleteConfirm();
+  closeLeftPanel();
+});
+
+document.querySelectorAll("[data-left-panel-button]").forEach((button) => {
+  button.addEventListener("click", () => openLeftPanel(button.dataset.leftPanelButton));
+});
+
+leftPanelClose?.addEventListener("click", closeLeftPanel);
+profileExpandButton?.addEventListener("click", () => {
+  const shouldExpand = rightProfileMode !== "expanded";
+  rightProfileMode = shouldExpand ? "expanded" : "mini";
+  if (shouldExpand) closeLeftPanel();
+  const user = getKnownUserById(selectedProfileId) || profileToUser(currentProfile);
+  if (user && rightProfileMode === "expanded") ensureProfilePosts(user.id);
+  renderProfile();
+});
+
+profileResetButton?.addEventListener("click", resetSelectedProfile);
+
+confirmCancel?.addEventListener("click", closeDeleteConfirm);
+confirmModal?.addEventListener("click", (event) => {
+  if (event.target === confirmModal) closeDeleteConfirm();
+});
+confirmDelete?.addEventListener("click", async () => {
+  const postId = pendingDeletePostId;
+  closeDeleteConfirm();
+  if (postId) await deletePost(postId);
 });
 
 profileAvatar?.addEventListener("click", () => {
@@ -2157,7 +2322,15 @@ avatarFileInput?.addEventListener("change", async () => {
   if (file) await updateCurrentAvatar(file);
 });
 
+composer?.addEventListener("focusin", expandComposer);
+composer?.addEventListener("focusout", () => {
+  window.setTimeout(syncComposerCollapsed, 0);
+});
+
+textInput?.addEventListener("input", syncComposerCollapsed);
+
 document.querySelector("[data-attach-image]").addEventListener("click", () => {
+  expandComposer();
   imageFileInput.click();
 });
 
@@ -2201,10 +2374,12 @@ imagePreview.addEventListener("click", (event) => {
 });
 
 externalUrlInput.addEventListener("input", () => {
+  expandComposer();
   const link = makeLinkPreview(externalUrlInput.value.trim());
   if (!link) {
     composerPreview.hidden = true;
     composerPreview.innerHTML = "";
+    syncComposerCollapsed();
     return;
   }
 
@@ -2220,6 +2395,7 @@ externalUrlInput.addEventListener("input", () => {
       </span>
     </a>
   `;
+  syncComposerCollapsed();
 });
 
 composer.addEventListener("submit", async (event) => {

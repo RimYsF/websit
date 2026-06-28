@@ -10,91 +10,45 @@
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Pacifico&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260608-3" />
+    <link rel="stylesheet" href="styles.css?v=20260628-8" />
   </head>
   <body>
+    <div class="app-background" aria-hidden="true"></div>
+
     <div class="app-shell">
-      <aside class="rail" aria-label="Primary navigation">
-        <button
-          class="mobile-menu-pill"
-          type="button"
-          data-mobile-menu
-          aria-label="Open navigation"
-          aria-expanded="false"
-        >
-          <span></span>
-        </button>
-
-        <div class="brand-row">
-          <a class="brand-wordmark" href="#feed-view" aria-label="Builder Story home">
-            Builder Story<span>.</span>
-          </a>
-          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle theme">
-            <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M20.4 15.1A8.3 8.3 0 0 1 8.9 3.6 9.1 9.1 0 1 0 20.4 15.1Z"
-              />
-            </svg>
-            <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="4.25" />
-              <path d="M12 2.75v2.2M12 19.05v2.2M21.25 12h-2.2M4.95 12h-2.2" />
-              <path d="m18.55 5.45-1.55 1.55M7 17l-1.55 1.55M18.55 18.55 17 17M7 7 5.45 5.45" />
-            </svg>
-          </button>
-        </div>
-
-        <nav class="builder-dock" aria-label="Main navigation">
-          <button class="dock-tab is-active" type="button" data-view="feed">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3.5 11.5 12 4l8.5 7.5" />
-              <path d="M6.5 10.5V20h5v-5.5h3V20h5v-9.5" />
-            </svg>
-            <span>Home</span>
-          </button>
-          <button class="dock-tab" type="button" data-view="profile">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 11.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
-              <path d="M4.5 21c.65-4.2 3.2-6.4 7.5-6.4s6.85 2.2 7.5 6.4" />
-            </svg>
-            <span>Profile</span>
-          </button>
-          <button class="dock-tab" type="button" data-settings-button>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-              <path d="M19 12a7 7 0 0 0-.1-1.1l2-1.55-2-3.45-2.35.95a7 7 0 0 0-1.9-1.1L14.3 3h-4.6l-.35 2.75a7 7 0 0 0-1.9 1.1L5.1 5.9l-2 3.45 2 1.55a7.2 7.2 0 0 0 0 2.2l-2 1.55 2 3.45 2.35-.95a7 7 0 0 0 1.9 1.1l.35 2.75h4.6l.35-2.75a7 7 0 0 0 1.9-1.1l2.35.95 2-3.45-2-1.55c.05-.35.1-.72.1-1.1Z" />
-            </svg>
-            <span>Settings</span>
-          </button>
-        </nav>
-
-        <section class="auth-card" aria-label="Account">
-          <div class="auth-signed-out" data-auth-signed-out>
-            <button class="google-auth-button" type="button" data-google-signin>
-              <span aria-hidden="true">G</span>
-              <strong>Continue with Google</strong>
+      <aside class="left-toolbar glass" aria-label="Primary tools">
+        <div class="identity-dock" aria-label="Account and workspace actions">
+          <div class="toolbar-identity" data-toolbar-avatar aria-label="Current profile">B</div>
+          <div class="toolbar-actions" aria-label="Workspace panels">
+            <button class="toolbar-button" type="button" data-left-panel-button="settings" title="Settings" aria-label="Settings">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19 12a7 7 0 0 0-.1-1.1l2-1.55-2-3.45-2.35.95a7 7 0 0 0-1.9-1.1L14.3 3h-4.6l-.35 2.75a7 7 0 0 0-1.9 1.1L5.1 5.9l-2 3.45 2 1.55a7.2 7.2 0 0 0 0 2.2l-2 1.55 2 3.45 2.35-.95a7 7 0 0 0 1.9 1.1l.35 2.75h4.6l.35-2.75a7 7 0 0 0 1.9-1.1l2.35.95 2-3.45-2-1.55c.05-.35.1-.72.1-1.1Z"/></svg>
             </button>
-            <p class="auth-status" data-auth-status></p>
+            <button class="toolbar-button" type="button" data-theme-toggle title="Theme" aria-label="Toggle theme">
+              <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 15.1A8.3 8.3 0 0 1 8.9 3.6 9.1 9.1 0 1 0 20.4 15.1Z"/></svg>
+              <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.25"/><path d="M12 2.75v2.2M12 19.05v2.2M21.25 12h-2.2M4.95 12h-2.2"/><path d="m18.55 5.45-1.55 1.55M7 17l-1.55 1.55M18.55 18.55 17 17M7 7 5.45 5.45"/></svg>
+            </button>
+            <button class="toolbar-button" type="button" data-left-panel-button="groups" title="Groups" aria-label="Groups">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 10.8a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="M15.5 11.4a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M3.4 20c.45-3.7 2.2-5.6 5.1-5.6s4.65 1.9 5.1 5.6"/><path d="M12.6 15.3c.72-.48 1.7-.73 2.9-.73 2.72 0 4.35 1.8 4.75 5.43"/></svg>
+            </button>
+            <button class="toolbar-button" type="button" data-left-panel-button="messages" title="Messages" aria-label="Messages">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/></svg>
+            </button>
           </div>
-          <div class="auth-signed-in" data-auth-signed-in hidden>
-            <div class="auth-user">
-              <span class="auth-avatar" data-auth-avatar>A</span>
-              <span class="auth-copy">
-                <strong data-auth-name>Builder</strong>
-                <small data-auth-handle>@builder</small>
-              </span>
-            </div>
-            <button class="new-post-button" type="button" data-new-post>New post +</button>
-            <button class="auth-submit auth-signout" type="button" data-auth-signout>Sign out</button>
-          </div>
-        </section>
+        </div>
       </aside>
 
-      <main class="timeline">
+      <aside class="left-panel" data-left-panel hidden>
+        <header>
+          <p class="panel-kicker">Builder Story</p>
+          <h2 data-left-panel-title>Settings</h2>
+          <button class="panel-close" type="button" data-left-panel-close aria-label="Close panel">-</button>
+        </header>
+        <div class="panel-body" data-left-panel-body></div>
+      </aside>
+
+      <main class="feed-column" aria-label="Builder Story feed">
         <div class="top-search">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m20 20-4.3-4.3" />
-            <path d="M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
-          </svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 20-4.3-4.3"/><path d="M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z"/></svg>
           <label class="sr-only" for="global-search">Search people, posts, tags</label>
           <input id="global-search" type="search" placeholder="Search people, posts, tags" />
         </div>
@@ -102,51 +56,15 @@
         <section class="view is-active" id="feed-view" aria-label="Feed">
           <div class="feed-filter-bar">
             <div class="segmented" role="tablist" aria-label="Feed filter">
-              <button class="segment is-active" type="button" data-feed-filter="latest">
-                For you
-              </button>
-              <button class="segment" type="button" data-feed-filter="following">
-                Following
-              </button>
+              <button class="segment is-active" type="button" data-feed-filter="latest">For you</button>
+              <button class="segment" type="button" data-feed-filter="following">Following</button>
             </div>
           </div>
-          <div class="post-list" id="post-list" aria-live="polite"></div>
-          <div class="feed-profile-view" id="feed-profile-view" hidden></div>
-        </section>
-
-        <section class="view" id="profile-view" aria-labelledby="profile-title">
-          <header class="profile-card">
-            <div class="profile-topline">
-              <div class="profile-avatar">A</div>
-              <input
-                id="avatar-file"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
-                hidden
-              />
-            </div>
-            <h1 id="profile-title">Alex Morgan</h1>
-            <p>
-              Full-stack builder working on calm developer tools, launch notes
-              and small open-source experiments.
-            </p>
-            <div class="profile-stats">
-              <span><strong id="profile-post-count">0</strong> posts</span>
-              <span><strong>1.8k</strong> followers</span>
-              <span><strong>128</strong> following</span>
-            </div>
-          </header>
-
-          <form class="composer" id="composer">
+          <form class="composer is-collapsed" id="composer">
             <div class="composer-main">
+              <div class="composer-account" data-composer-account></div>
               <label class="sr-only" for="post-text">Post text</label>
-              <textarea
-                id="post-text"
-                maxlength="280"
-                placeholder="What's new today?"
-                required
-              ></textarea>
-
+              <textarea id="post-text" maxlength="2000" placeholder="What's shipping today?" required></textarea>
               <input id="image-url" type="hidden" />
               <input
                 id="image-file"
@@ -155,40 +73,49 @@
                 multiple
                 hidden
               />
-
               <div class="image-preview-strip" id="image-preview" hidden></div>
               <div class="composer-preview" id="composer-preview" hidden></div>
-
               <div class="composer-actions">
                 <div class="composer-tools">
-                  <button
-                    class="tool-button add-media-button"
-                    type="button"
-                    data-attach-image
-                    title="Attach image"
-                    aria-label="Attach image"
-                  >
-                    +
-                  </button>
+                  <button class="tool-button add-media-button" type="button" data-attach-image title="Attach image" aria-label="Attach image">+</button>
                   <label class="link-field">
                     <span>Link</span>
-                    <input
-                      id="external-url"
-                      type="text"
-                      placeholder="github.com/user/repo"
-                    />
+                    <input id="external-url" type="text" placeholder="github.com/user/repo" />
                   </label>
                 </div>
-                <button class="send-button" type="submit" aria-label="Publish post">
-                  Publish
-                </button>
+                <button class="send-button" type="submit" aria-label="Publish post">Publish</button>
               </div>
+              <p class="auth-status" data-auth-status></p>
             </div>
           </form>
-
-          <div class="post-list" id="profile-post-list"></div>
+          <div class="post-list" id="post-list" aria-live="polite"></div>
+          <div class="feed-profile-view" id="feed-profile-view" hidden></div>
         </section>
       </main>
+
+      <aside class="right-column" aria-label="Profile and composer">
+        <section class="profile-card" data-right-profile>
+          <div class="profile-topline">
+            <button class="profile-back-button" type="button" data-profile-reset hidden aria-label="Back to my profile">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button class="profile-expand-button" type="button" data-profile-expand aria-label="Expand profile">+</button>
+          </div>
+          <div class="profile-avatar">B</div>
+          <input
+            id="avatar-file"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+            hidden
+          />
+          <h1 id="profile-title">Builder Story</h1>
+          <p>Create a profile to publish build notes and follow other builders.</p>
+          <div class="profile-stats"></div>
+          <div class="profile-actions" data-profile-actions></div>
+          <div class="avatar-nudge" data-avatar-nudge hidden></div>
+          <div class="profile-post-list" id="profile-post-list"></div>
+        </section>
+      </aside>
     </div>
 
     <template id="post-template">
@@ -202,14 +129,7 @@
               <span class="post-time"></span>
             </div>
             <div class="post-menu-wrap">
-              <button
-                class="icon-button post-more"
-                type="button"
-                aria-label="Post actions"
-                aria-expanded="false"
-              >
-                ...
-              </button>
+              <button class="icon-button post-more" type="button" aria-label="Post actions" aria-expanded="false">...</button>
               <div class="post-menu" hidden>
                 <button class="post-menu-delete" type="button">Delete</button>
               </div>
@@ -234,24 +154,47 @@
     </template>
 
     <div class="auth-prompt" data-auth-prompt hidden>
-      <section class="auth-prompt-card" role="dialog" aria-modal="true" aria-labelledby="auth-prompt-title">
-        <button class="auth-prompt-close" type="button" data-auth-prompt-close aria-label="Close">
-          ...
-        </button>
+      <section class="auth-prompt-card glass-modal" role="dialog" aria-modal="true" aria-labelledby="auth-prompt-title">
+        <button class="auth-prompt-close" type="button" data-auth-prompt-close aria-label="Close">x</button>
         <p class="auth-prompt-kicker">Builder Story</p>
         <h2 id="auth-prompt-title">Join the builders already shipping.</h2>
         <p data-auth-prompt-copy>
           Sign in to react, comment, follow projects, and keep your own build log in one clean place.
         </p>
-        <button class="auth-prompt-action" type="button" data-auth-prompt-signin>
+        <button class="auth-prompt-action google-auth-button" type="button" data-auth-prompt-signin>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.72-.06-1.24-.19-1.78H12v3.24h5.52c-.11.8-.71 2.01-2.04 2.82l-.02.11 2.96 2.01.2.02c1.84-1.49 2.98-3.69 2.98-6.42Z"/><path fill="#34A853" d="M12 21c2.64 0 4.85-.76 6.47-2.08l-3.08-2.14c-.82.5-1.93.85-3.39.85a5.86 5.86 0 0 1-5.54-3.57l-.11.01-3.08 2.09-.04.1A9.78 9.78 0 0 0 12 21Z"/><path fill="#FBBC05" d="M6.46 14.06A5.35 5.35 0 0 1 6.15 12c0-.72.11-1.41.3-2.06l-.01-.14-3.12-2.13-.1.04A8.54 8.54 0 0 0 2.2 12c0 1.54.4 2.99 1.03 4.28l3.23-2.22Z"/><path fill="#EA4335" d="M12 6.37c1.84 0 3.08.7 3.79 1.28l2.76-2.36C16.85 3.91 14.64 3 12 3a9.78 9.78 0 0 0-8.77 5.28l3.22 2.22A5.89 5.89 0 0 1 12 6.37Z"/></svg>
           Continue with Google
         </button>
       </section>
     </div>
 
-    <div class="profile-popover-layer" data-profile-popover-layer></div>
+    <div class="confirm-modal" data-confirm-modal hidden>
+      <section class="confirm-card glass-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+        <h2 id="confirm-title">Delete post?</h2>
+        <p>This removes the post from Builder Story and deletes attached R2 objects when possible.</p>
+        <div class="confirm-actions">
+          <button class="confirm-secondary" type="button" data-confirm-cancel>Cancel</button>
+          <button class="confirm-danger" type="button" data-confirm-delete>Delete</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="profile-popover-layer" data-profile-popover-layer hidden></div>
+    <div hidden aria-hidden="true">
+      <div data-auth-signed-out hidden></div>
+      <div data-auth-signed-in hidden>
+      <span data-auth-name></span>
+      <span data-auth-handle></span>
+      <span data-auth-avatar></span>
+      <button type="button" data-auth-signout></button>
+      <button type="button" data-google-signin></button>
+      <button type="button" data-new-post></button>
+      <button type="button" data-mobile-menu></button>
+      <button type="button" data-settings-button></button>
+      </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="app.js?v=20260608-3" defer></script>
+    <script src="app.js?v=20260628-2" defer></script>
   </body>
 </html>
